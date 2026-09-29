@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mueblería Rosa · Gestión de ventas</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#fff5f9;--card:#fff;--ink:#3a1f2d;--mut:#8a6577;--pk:#ec4899;--pk2:#db2777;--soft:#fce7f3;--line:#f8d0e3;--ok:#16a34a;--bad:#e11d48}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1c1017;--card:#2a1822;--ink:#fde7f1;--mut:#c79bb2;--soft:#3b2030;--line:#4d2a3f}}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 'Inter',system-ui,-apple-system,'Segoe UI',sans-serif}
+header{background:linear-gradient(135deg,#f472b6,#db2777);color:#fff;padding:18px 20px}
+header h1{margin:0;font-size:20px}header p{margin:2px 0 0;opacity:.85;font-size:13px}
+nav{display:flex;gap:6px;padding:10px 14px;overflow-x:auto;position:sticky;top:env(safe-area-inset-top,0px);background:var(--bg);z-index:5}
+nav button{border:0;background:var(--soft);color:var(--pk2);padding:9px 15px;border-radius:99px;font-weight:600;cursor:pointer;white-space:nowrap}
+nav button.on{background:var(--pk);color:#fff}
+main{max-width:1050px;margin:0 auto;padding:6px 14px 40px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px;box-shadow:0 4px 14px rgba(219,39,119,.06)}
+h2{margin:0 0 12px;font-size:17px}h3{margin:0 0 8px;font-size:15px;color:var(--pk2)}
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px}
+.kpi small{color:var(--mut)}.kpi b{display:block;font-size:22px;color:var(--pk2)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-bottom:8px}
+label{font-size:12px;color:var(--mut);display:flex;flex-direction:column;gap:3px;flex:1;min-width:110px}
+input,select{padding:9px 10px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);font:inherit;width:100%}
+input:focus,select:focus{outline:2px solid var(--pk);border-color:transparent}
+.btn{border:0;background:var(--pk);color:#fff;padding:9px 16px;border-radius:10px;font-weight:600;cursor:pointer}
+.btn:hover{background:var(--pk2)}.btn.g{background:var(--soft);color:var(--pk2)}.btn.s{padding:5px 10px;font-size:12px}.btn.d{background:#ffe4e6;color:var(--bad)}
+.tw{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;color:var(--mut);font-size:12px;padding:8px;border-bottom:1px solid var(--line)}
+td{padding:8px;border-bottom:1px solid var(--line);vertical-align:middle}
+.r{text-align:right}.tag{background:var(--soft);color:var(--pk2);padding:2px 9px;border-radius:99px;font-size:12px;font-weight:600}
+.low{color:var(--bad);font-weight:700}.ok{color:var(--ok);font-weight:600}
+.bar{height:8px;background:var(--soft);border-radius:9px;min-width:60px}.bar i{display:block;height:100%;background:linear-gradient(90deg,#f472b6,#db2777);border-radius:9px}
+.two{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+.tot{font-size:20px;font-weight:800;color:var(--pk2)}
+.chip{display:inline-block;margin-top:8px;background:rgba(255,255,255,.25);color:#fff;padding:3px 11px;border-radius:99px;font-size:12px;font-weight:600}.chip.ok{background:#16a34a}.chip.bad{background:#be123c}
+.toast{position:fixed;bottom:calc(20px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);background:var(--pk2);color:#fff;padding:10px 18px;border-radius:99px;font-weight:600;z-index:9}
+.empty{color:var(--mut);padding:14px;text-align:center}
+</style></head><body>
+<header><h1>🌸 Mueblería Rosa</h1><p>Ventas, inventario y reportes en un solo lugar</p><span id="st" class="chip">…</span> <button class="chip" style="border:0;cursor:pointer" onclick="App.refresh()">↻ Actualizar</button></header>
+<nav id="nav"></nav><main id="app"></main>
+
+<script>
+/* ===== MÓDULO: Utilidades ===== */
+const U={
+  money:n=>new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN'}).format(n||0),
+  esc:s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),
+  today:()=>new Date().toISOString().slice(0,10),
+  uid:()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6),
+  $:id=>document.getElementById(id),
+  toast(m){const t=document.createElement('div');t.className='toast';t.textContent=m;document.body.append(t);setTimeout(()=>t.remove(),2200)}
+};
+const METHODS={efectivo:'💵 Efectivo',transferencia:'🏦 Transferencia',tarjeta:'💳 Tarjeta'};
+
+/* ===== CONFIGURACIÓN: pega aquí los datos de tu Google Sheets ===== */
+const CONFIG={
+  SCRIPT_URL:'https://script.google.com/macros/s/AKfycbyItKYn8NS53PBlcpY0hpL0TjwH88-qTkQUHkh2E9bV9Wxwrb6EKoOVVcHi2sLG20i2/exec',        // URL del Web App de Apps Script (termina en /exec)
+  SPREADSHEET_ID:'',    // ID de tu hoja (lo que va entre /d/ y /edit en la URL)
+  TOKEN:'cambia-esta-clave' // debe ser igual al TOKEN de Code.gs
+};
+
+/* ===== MÓDULO: Store (Google Sheets vía Apps Script) ===== */
+const Store={
+  data:{products:[],clients:[],sales:[]},ready:false,timer:null,
+  status(t,c){const e=U.$('st');if(e){e.textContent=t;e.className='chip '+(c||'')}},
+  async load(){
+    if(!CONFIG.SCRIPT_URL){ // modo local de respaldo
+      try{const r=localStorage.getItem('muebleria-local');if(r)this.data=JSON.parse(r)}catch(e){}
+      this.ready=true;return this.status('Modo local (sin Sheets)','bad')}
+    this.status('Cargando…');
+    try{
+      const q='?action=getAll&token='+encodeURIComponent(CONFIG.TOKEN)+'&id='+encodeURIComponent(CONFIG.SPREADSHEET_ID);
+      const j=await (await fetch(CONFIG.SCRIPT_URL+q)).json();
+      if(!j.ok)throw new Error(j.error);
+      this.data=j.data;this.ready=true;this.status('Sincronizado ✔','ok');
+    }catch(e){this.status('Error al cargar: '+e.message,'bad')}
+  },
+  save(){
+    if(!this.ready)return; // evita sobrescribir la hoja si la carga falló
+    try{localStorage.setItem('muebleria-local',JSON.stringify(this.data))}catch(e){}
+    if(!CONFIG.SCRIPT_URL)return;
+    this.status('Guardando…');clearTimeout(this.timer);this.timer=setTimeout(()=>this.push(),700);
+  },
+  async push(){
+    try{
+      const r=await fetch(CONFIG.SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body:JSON.stringify({action:'saveAll',token:CONFIG.TOKEN,id:CONFIG.SPREADSHEET_ID,data:this.data})});
+      const j=await r.json();if(!j.ok)throw new Error(j.error);this.status('Guardado en Sheets ✔','ok');
+    }catch(e){this.status('Error al guardar: '+e.message,'bad')}
+  }
+};
+
+/* ===== MÓDULO: Catálogo / Inventario ===== */
+const Catalog={
+  add(p){Store.data.products.push({id:U.uid(),...p});Store.save()},
+  get:id=>Store.data.products.find(p=>p.id===id),
+  update(id,f){Object.assign(this.get(id),f);Store.save()},
+  remove(id){Store.data.products=Store.data.products.filter(p=>p.id!==id);Store.save()},
+  categories:()=>[...new Set(Store.data.products.map(p=>p.cat))].sort(),
+  view(){
+    const ps=Store.data.products;
+    return `<div class="card"><h2>Agregar mueble al catálogo</h2><div class="row">
+      <label>Nombre<input id="pn"></label><label>Tipo / categoría<input id="pc" list="cats" placeholder="Sala, Comedor…"></label>
+      <label>Precio<input id="pp" type="number" min="0"></label><label>Stock<input id="ps" type="number" min="0" value="1"></label>
+      <button class="btn" onclick="Catalog.ui.add()">Agregar</button></div>
+      <datalist id="cats">${this.categories().map(c=>`<option value="${U.esc(c)}">`).join('')}</datalist></div>
+    <div class="card"><h2>Catálogo (${ps.length})</h2><div class="tw"><table><tr><th>Mueble</th><th>Tipo</th><th class="r">Precio</th><th class="r">Stock</th><th></th></tr>
+    ${ps.map(p=>`<tr><td>${U.esc(p.name)}</td><td><span class="tag">${U.esc(p.cat)}</span></td>
+      <td class="r"><input style="width:110px;text-align:right" type="number" value="${p.price}" onchange="Catalog.update('${p.id}',{price:+this.value});U.toast('Precio actualizado')"></td>
+      <td class="r ${p.stock<=2?'low':''}"><input style="width:80px;text-align:right" type="number" value="${p.stock}" onchange="Catalog.update('${p.id}',{stock:+this.value});App.render()"></td>
+      <td class="r"><button class="btn d s" onclick="Catalog.ui.del('${p.id}')">Eliminar</button></td></tr>`).join('')||'<tr><td colspan=5 class="empty">Sin muebles</td></tr>'}
+    </table></div><small style="color:var(--mut)">Stock en rojo = 2 piezas o menos.</small></div>`},
+  ui:{
+    add(){const name=U.$('pn').value.trim(),cat=U.$('pc').value.trim()||'General',price=+U.$('pp').value,stock=+U.$('ps').value;
+      if(!name||price<=0)return U.toast('Nombre y precio son requeridos');
+      Catalog.add({name,cat,price,stock});App.render()},
+    del(id){if(confirm('¿Eliminar este mueble del catálogo?')){Catalog.remove(id);App.render()}}
+  }
+};
+
+/* ===== MÓDULO: Clientes ===== */
+const Clients={
+  add(c){const n={id:U.uid(),...c};Store.data.clients.push(n);Store.save();return n},
+  get:id=>Store.data.clients.find(c=>c.id===id),
+  name(id){return this.get(id)?.name||'Mostrador'},
+  view(){
+    const cs=Store.data.clients,S=Store.data.sales;
+    return `<div class="card"><h2>Nuevo cliente</h2><div class="row">
+      <label>Nombre<input id="cn"></label><label>Teléfono<input id="ct"></label><label>Dirección<input id="ca"></label>
+      <button class="btn" onclick="Clients.ui.add()">Guardar</button></div></div>
+    <div class="card"><h2>Clientes (${cs.length})</h2><div class="tw"><table><tr><th>Nombre</th><th>Teléfono</th><th>Dirección</th><th class="r">Compras</th><th class="r">Saldo</th></tr>
+    ${cs.map(c=>{const v=S.filter(s=>s.clientId===c.id);return `<tr><td>${U.esc(c.name)}</td><td>${U.esc(c.phone)}</td><td>${U.esc(c.addr)}</td>
+      <td class="r">${U.money(v.reduce((a,s)=>a+s.total,0))}</td><td class="r ${v.some(s=>Sales.balance(s)>0)?'low':''}">${U.money(v.reduce((a,s)=>a+Sales.balance(s),0))}</td></tr>`}).join('')||'<tr><td colspan=5 class="empty">Sin clientes</td></tr>'}
+    </table></div></div>`},
+  ui:{add(){const name=U.$('cn').value.trim();if(!name)return U.toast('Escribe el nombre');
+    Clients.add({name,phone:U.$('ct').value,addr:U.$('ca').value});App.render()}}
+};
+
+/* ===== MÓDULO: Ventas ===== */
+const Sales={
+  cart:[],pays:[],cid:'',date:'',newCli:false,
+  paid:s=>s.payments.reduce((a,p)=>a+p.amount,0),
+  balance(s){return Math.max(0,s.total-this.paid(s))},
+  total(){return this.cart.reduce((a,i)=>a+i.qty*i.price,0)},
+  create(clientId){
+    const items=this.cart.map(i=>({...i})),total=this.total();
+    items.forEach(i=>{const p=Catalog.get(i.pid);if(p)p.stock-=i.qty});   // descuenta inventario
+    const s={id:U.uid(),date:U.$('sd').value||U.today(),clientId,items,total,
+      payments:this.pays.filter(p=>p.amount>0).map(p=>({...p,date:U.$('sd').value||U.today()}))};
+    Store.data.sales.push(s);Store.save();this.cart=[];this.pays=[];return s},
+  view(){
+    const ps=Store.data.products.filter(p=>p.stock>0),tot=this.total(),paid=this.pays.reduce((a,p)=>a+(+p.amount||0),0);
+    return `<div class="two"><div class="card"><h2>1 · Cliente y muebles</h2>
+      <div class="row"><label>Fecha<input id="sd" type="date" value="${this.date||U.today()}" onchange="Sales.date=this.value"></label>
+      <label>Cliente<select id="sc" onchange="Sales.cid=this.value">
+        <option value="">Mostrador (sin registro)</option>${Store.data.clients.map(c=>`<option value="${c.id}" ${c.id===this.cid?'selected':''}>${U.esc(c.name)}</option>`).join('')}</select></label>
+      <button class="btn g" onclick="Sales.newCli=!Sales.newCli;App.render()">${this.newCli?'Cerrar':'+ Nuevo cliente'}</button></div>
+      ${this.newCli?`<div class="row" style="background:var(--soft);padding:10px;border-radius:12px">
+        <label>Nombre<input id="qn"></label><label>Teléfono<input id="qt"></label><label>Dirección<input id="qa"></label>
+        <button class="btn" onclick="Sales.ui.addClient()">Guardar y usar</button></div>`:''}
+      <div class="row"><label>Mueble<select id="sp">${ps.map(p=>`<option value="${p.id}">${U.esc(p.name)} · ${U.money(p.price)} · stock ${p.stock}</option>`).join('')||'<option value="">Sin stock</option>'}</select></label>
+      <label style="max-width:80px">Cant.<input id="sq" type="number" min="1" value="1"></label>
+      <button class="btn g" onclick="Sales.ui.addItem()">+ Agregar</button></div>
+      <div class="tw"><table><tr><th>Pieza</th><th class="r">Cant.</th><th class="r">Precio</th><th class="r">Subtotal</th><th></th></tr>
+      ${this.cart.map((i,k)=>`<tr><td>${U.esc(i.name)}</td><td class="r">${i.qty}</td>
+        <td class="r"><input style="width:100px;text-align:right" type="number" value="${i.price}" onchange="Sales.ui.setPrice(${k},this.value)"></td>
+        <td class="r">${U.money(i.qty*i.price)}</td><td><button class="btn d s" onclick="Sales.cart.splice(${k},1);App.render()">✕</button></td></tr>`).join('')||'<tr><td colspan=5 class="empty">Agrega muebles a la venta</td></tr>'}</table></div>
+      <p class="r">Total: <span class="tot">${U.money(tot)}</span></p></div>
+    <div class="card"><h2>2 · Forma de pago</h2><p style="color:var(--mut);margin-top:0">Un solo pago o varios; combina efectivo, transferencia y tarjeta. Si queda saldo, se abona después en Historial.</p>
+      ${this.pays.map((p,k)=>`<div class="row"><label>Método<select onchange="Sales.pays[${k}].method=this.value">${Object.entries(METHODS).map(([m,l])=>`<option value="${m}" ${p.method===m?'selected':''}>${l}</option>`).join('')}</select></label>
+        <label>Monto<input type="number" min="0" value="${p.amount}" onchange="Sales.pays[${k}].amount=+this.value;App.render()"></label>
+        <button class="btn d s" onclick="Sales.pays.splice(${k},1);App.render()">✕</button></div>`).join('')}
+      <div class="row"><button class="btn g" onclick="Sales.ui.addPay()">+ Agregar pago</button>
+      <button class="btn g" onclick="Sales.ui.fullPay()">Pagar total en 1 pago</button></div>
+      <p>Pagado: <b>${U.money(paid)}</b> · Saldo: <b class="${tot-paid>0?'low':'ok'}">${U.money(Math.max(0,tot-paid))}</b>${paid>tot?' <span class="low">(excede el total)</span>':''}</p>
+      <button class="btn" style="width:100%;padding:13px" onclick="Sales.ui.save()">✅ Registrar venta</button></div></div>`},
+  ui:{
+    addItem(){const p=Catalog.get(U.$('sp').value),q=+U.$('sq').value;if(!p||q<1)return;
+      const inCart=Sales.cart.filter(i=>i.pid===p.id).reduce((a,i)=>a+i.qty,0);
+      if(inCart+q>p.stock)return U.toast('Stock insuficiente (quedan '+p.stock+')');
+      Sales.cart.push({pid:p.id,name:p.name,cat:p.cat,qty:q,price:p.price});App.render()},
+    addClient(){const name=U.$('qn').value.trim();if(!name)return U.toast('Escribe el nombre del cliente');
+      const c=Clients.add({name,phone:U.$('qt').value,addr:U.$('qa').value});
+      Sales.cid=c.id;Sales.newCli=false;U.toast('Cliente agregado');App.render()},
+    setPrice(k,v){Sales.cart[k].price=Math.max(0,+v);App.render()},
+    addPay(){Sales.pays.push({method:'efectivo',amount:Math.max(0,Sales.total()-Sales.pays.reduce((a,p)=>a+(+p.amount||0),0))});App.render()},
+    fullPay(){Sales.pays=[{method:'efectivo',amount:Sales.total()}];App.render()},
+    save(){
+      if(!Sales.cart.length)return U.toast('Agrega al menos un mueble');
+      const paid=Sales.pays.reduce((a,p)=>a+(+p.amount||0),0);
+      if(paid>Sales.total())return U.toast('Los pagos exceden el total');
+      const cid=U.$('sc').value;
+      if(paid<Sales.total()&&!cid&&!confirm('Queda saldo pendiente sin cliente registrado. ¿Continuar?'))return;
+      Sales.create(cid);Sales.cid='';Sales.date='';U.toast('Venta registrada ✔');App.go('history')}
+  },
+  history(){
+    const S=[...Store.data.sales].sort((a,b)=>b.date.localeCompare(a.date));
+    return `<div class="card"><h2>Historial de ventas (${S.length})</h2><div class="tw"><table><tr><th>Fecha</th><th>Cliente</th><th>Muebles</th><th class="r">Total</th><th>Pagos</th><th class="r">Saldo</th><th></th></tr>
+    ${S.map(s=>`<tr><td>${s.date}</td><td>${U.esc(Clients.name(s.clientId))}</td>
+      <td>${s.items.map(i=>`${i.qty}× ${U.esc(i.name)}`).join(', ')}</td><td class="r">${U.money(s.total)}</td>
+      <td>${s.payments.map(p=>`<span class="tag">${METHODS[p.method].split(' ')[0]} ${U.money(p.amount)}</span>`).join(' ')}</td>
+      <td class="r ${Sales.balance(s)>0?'low':'ok'}">${U.money(Sales.balance(s))}</td>
+      <td class="r">${Sales.balance(s)>0?`<button class="btn s" onclick="Sales.ui.abonar('${s.id}')">Abonar</button> `:''}<button class="btn d s" onclick="Sales.ui.cancel('${s.id}')">Cancelar</button></td></tr>`).join('')||'<tr><td colspan=7 class="empty">Aún no hay ventas</td></tr>'}
+    </table></div></div>`},
+  ui2:{},
+};
+Sales.ui.abonar=id=>{const s=Store.data.sales.find(x=>x.id===id);
+  const m=(prompt('Método: efectivo, transferencia o tarjeta','efectivo')||'').toLowerCase();if(!METHODS[m])return;
+  const a=+prompt('Monto (saldo '+Sales.balance(s)+')');if(!(a>0)||a>Sales.balance(s))return U.toast('Monto inválido');
+  s.payments.push({method:m,amount:a,date:U.today()});Store.save();App.render()};
+Sales.ui.cancel=id=>{if(!confirm('¿Cancelar venta? Se regresan las piezas al stock.'))return;
+  const s=Store.data.sales.find(x=>x.id===id);s.items.forEach(i=>{const p=Catalog.get(i.pid);if(p)p.stock+=i.qty});
+  Store.data.sales=Store.data.sales.filter(x=>x.id!==id);Store.save();App.render()};
+
+/* ===== MÓDULO: Reportes ===== */
+const Reports={
+  from:'',to:'',
+  filtered(){return Store.data.sales.filter(s=>(!this.from||s.date>=this.from)&&(!this.to||s.date<=this.to))},
+  group(rows){ // rows: [key,value]
+    const m={};rows.forEach(([k,v])=>m[k]=(m[k]||0)+v);
+    return Object.entries(m).sort((a,b)=>b[1]-a[1])},
+  block(title,data,fmt=k=>U.esc(k)){
+    const max=Math.max(1,...data.map(d=>d[1]));
+    return `<div class="card"><h3>${title}</h3><div class="tw"><table>${data.map(([k,v])=>`<tr><td>${fmt(k)}</td><td style="width:35%"><div class="bar"><i style="width:${v/max*100}%"></i></div></td><td class="r"><b>${U.money(v)}</b></td></tr>`).join('')||'<tr><td class="empty">Sin datos</td></tr>'}</table></div></div>`},
+  view(){
+    const S=this.filtered(),total=S.reduce((a,s)=>a+s.total,0),cobrado=S.reduce((a,s)=>a+Sales.paid(s),0),
+      piezas=S.reduce((a,s)=>a+s.items.reduce((x,i)=>x+i.qty,0),0);
+    const byDay=this.group(S.map(s=>[s.date,s.total])).sort((a,b)=>b[0].localeCompare(a[0]));
+    const byMethod=this.group(S.flatMap(s=>s.payments.map(p=>[p.method,p.amount])));
+    const byClient=this.group(S.map(s=>[Clients.name(s.clientId),s.total]));
+    const byCat=this.group(S.flatMap(s=>s.items.map(i=>[i.cat,i.qty*i.price])));
+    const byItem=this.group(S.flatMap(s=>s.items.map(i=>[i.name,i.qty*i.price])));
+    const stockVal=Store.data.products.reduce((a,p)=>a+p.stock*p.price,0);
+    return `<div class="card"><h2>Reportes</h2><div class="row"><label>Desde<input type="date" value="${this.from}" onchange="Reports.from=this.value;App.render()"></label>
+      <label>Hasta<input type="date" value="${this.to}" onchange="Reports.to=this.value;App.render()"></label>
+      <button class="btn g" onclick="Reports.from=Reports.to=U.today();App.render()">Hoy</button>
+      <button class="btn g" onclick="Reports.from=Reports.to='';App.render()">Todo</button></div></div>
+    <div class="grid" style="margin-bottom:14px"><div class="kpi"><small>Vendido</small><b>${U.money(total)}</b></div>
+      <div class="kpi"><small>Cobrado</small><b>${U.money(cobrado)}</b></div><div class="kpi"><small>Por cobrar</small><b>${U.money(total-cobrado)}</b></div>
+      <div class="kpi"><small>Piezas vendidas</small><b>${piezas}</b></div><div class="kpi"><small>Valor en inventario</small><b>${U.money(stockVal)}</b></div></div>
+    <div class="two">${this.block('📅 Por día',byDay)}${this.block('💳 Por método de pago (cobrado)',byMethod,k=>METHODS[k])}
+    ${this.block('👤 Por cliente',byClient)}${this.block('🛋️ Por tipo de mueble',byCat)}</div>${this.block('📦 Por mueble',byItem)}`}
+};
+
+/* ===== MÓDULO: App (navegación) ===== */
+const App={
+  tab:'reports',
+  tabs:[['reports','📊 Reportes'],['sale','🛒 Nueva venta'],['history','🧾 Historial'],['catalog','🛋️ Catálogo'],['clients','👥 Clientes']],
+  views:{reports:()=>Reports.view(),sale:()=>Sales.view(),history:()=>Sales.history(),catalog:()=>Catalog.view(),clients:()=>Clients.view()},
+  go(t){this.tab=t;this.render()},
+  render(){
+    U.$('nav').innerHTML=this.tabs.map(([k,l])=>`<button class="${k===this.tab?'on':''}" onclick="App.go('${k}')">${l}</button>`).join('');
+    U.$('app').innerHTML=this.views[this.tab]();
+  },
+  async refresh(){await Store.load();this.render()},
+  async init(){U.$('app').innerHTML='<div class="empty">Cargando datos…</div>';await Store.load();this.render()}
+};
+App.init();
+</script></body></html>
