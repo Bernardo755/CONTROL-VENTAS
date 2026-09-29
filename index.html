@@ -1,3 +1,5 @@
+
+
 <!DOCTYPE html>
 <html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -35,6 +37,7 @@ td{padding:8px;border-bottom:1px solid var(--line);vertical-align:middle}
 .two{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
 .tot{font-size:20px;font-weight:800;color:var(--pk2)}
 .chip{display:inline-block;margin-top:8px;background:rgba(255,255,255,.25);color:#fff;padding:3px 11px;border-radius:99px;font-size:12px;font-weight:600}.chip.ok{background:#16a34a}.chip.bad{background:#be123c}
+.plist{max-height:270px;overflow-y:auto;border:1px solid var(--line);border-radius:12px;margin-bottom:10px}.pi{display:flex;justify-content:space-between;gap:10px;padding:9px 12px;border-bottom:1px solid var(--line);cursor:pointer}.pi:hover{background:var(--soft)}.pi.off{opacity:.45;cursor:not-allowed}
 .toast{position:fixed;bottom:calc(20px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);background:var(--pk2);color:#fff;padding:10px 18px;border-radius:99px;font-weight:600;z-index:9}
 .empty{color:var(--mut);padding:14px;text-align:center}
 </style></head><body>
@@ -139,7 +142,7 @@ const Clients={
 
 /* ===== MÓDULO: Ventas ===== */
 const Sales={
-  cart:[],pays:[],cid:'',date:'',newCli:false,
+  cart:[],pays:[],cid:'',date:'',newCli:false,q:'',
   paid:s=>s.payments.reduce((a,p)=>a+p.amount,0),
   balance(s){return Math.max(0,s.total-this.paid(s))},
   total(){return this.cart.reduce((a,i)=>a+i.qty*i.price,0)},
@@ -149,6 +152,13 @@ const Sales={
     const s={id:U.uid(),date:U.$('sd').value||U.today(),clientId,items,total,
       payments:this.pays.filter(p=>p.amount>0).map(p=>({...p,date:U.$('sd').value||U.today()}))};
     Store.data.sales.push(s);Store.save();this.cart=[];this.pays=[];return s},
+  list(){ // catálogo filtrado por lo que se escribe (sin acentos ni mayúsculas)
+    const n=t=>String(t).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(),q=n(this.q).trim();
+    const ps=Store.data.products.filter(p=>!q||n(p.name+' '+p.cat).includes(q));
+    return ps.map(p=>`<div class="pi ${p.stock<1?'off':''}" ${p.stock>0?`onclick="Sales.ui.addItem('${p.id}')"`:''}>
+      <div><b>${U.esc(p.name)}</b><br><span class="tag">${U.esc(p.cat)}</span> <small class="${p.stock<=2?'low':''}">${p.stock>0?'stock '+p.stock:'Agotado'}</small></div>
+      <div class="r"><b>${U.money(p.price)}</b><br><small style="color:var(--pk2)">${p.stock>0?'+ Agregar':''}</small></div></div>`).join('')
+      ||'<div class="empty">Sin resultados para «'+U.esc(this.q)+'»</div>'},
   view(){
     const ps=Store.data.products.filter(p=>p.stock>0),tot=this.total(),paid=this.pays.reduce((a,p)=>a+(+p.amount||0),0);
     return `<div class="two"><div class="card"><h2>1 · Cliente y muebles</h2>
@@ -159,9 +169,9 @@ const Sales={
       ${this.newCli?`<div class="row" style="background:var(--soft);padding:10px;border-radius:12px">
         <label>Nombre<input id="qn"></label><label>Teléfono<input id="qt"></label><label>Dirección<input id="qa"></label>
         <button class="btn" onclick="Sales.ui.addClient()">Guardar y usar</button></div>`:''}
-      <div class="row"><label>Mueble<select id="sp">${ps.map(p=>`<option value="${p.id}">${U.esc(p.name)} · ${U.money(p.price)} · stock ${p.stock}</option>`).join('')||'<option value="">Sin stock</option>'}</select></label>
-      <label style="max-width:80px">Cant.<input id="sq" type="number" min="1" value="1"></label>
-      <button class="btn g" onclick="Sales.ui.addItem()">+ Agregar</button></div>
+      <div class="row"><label>🔎 Buscar mueble (nombre o tipo)<input id="sb" type="search" placeholder="Ej. sofá, recámara, mesa…" value="${U.esc(this.q)}" oninput="Sales.ui.search(this.value)"></label>
+      <label style="max-width:90px">Cantidad<input id="sq" type="number" min="1" value="1"></label></div>
+      <div id="plist" class="plist">${this.list()}</div>
       <div class="tw"><table><tr><th>Pieza</th><th class="r">Cant.</th><th class="r">Precio</th><th class="r">Subtotal</th><th></th></tr>
       ${this.cart.map((i,k)=>`<tr><td>${U.esc(i.name)}</td><td class="r">${i.qty}</td>
         <td class="r"><input style="width:100px;text-align:right" type="number" value="${i.price}" onchange="Sales.ui.setPrice(${k},this.value)"></td>
@@ -176,7 +186,8 @@ const Sales={
       <p>Pagado: <b>${U.money(paid)}</b> · Saldo: <b class="${tot-paid>0?'low':'ok'}">${U.money(Math.max(0,tot-paid))}</b>${paid>tot?' <span class="low">(excede el total)</span>':''}</p>
       <button class="btn" style="width:100%;padding:13px" onclick="Sales.ui.save()">✅ Registrar venta</button></div></div>`},
   ui:{
-    addItem(){const p=Catalog.get(U.$('sp').value),q=+U.$('sq').value;if(!p||q<1)return;
+    search(v){Sales.q=v;U.$('plist').innerHTML=Sales.list()},
+    addItem(id){const p=Catalog.get(id),q=+U.$('sq').value;if(!p||q<1)return;
       const inCart=Sales.cart.filter(i=>i.pid===p.id).reduce((a,i)=>a+i.qty,0);
       if(inCart+q>p.stock)return U.toast('Stock insuficiente (quedan '+p.stock+')');
       Sales.cart.push({pid:p.id,name:p.name,cat:p.cat,qty:q,price:p.price});App.render()},
