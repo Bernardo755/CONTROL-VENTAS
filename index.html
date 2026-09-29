@@ -62,12 +62,10 @@ const METHODS={efectivo:'💵 Efectivo',transferencia:'🏦 Transferencia',tarje
 
 /* ===== CONFIGURACIÓN: pega aquí los datos de tu Google Sheets ===== */
 const CONFIG={
-  SCRIPT_URL:'https://script.google.com/macros/s/AKfycbzNZaafcdwqx4otXq_fHSE4Zb9ye-nc9aDCzzgUZQuF-ztSzIKysYTGgA_bgzRDwq_4/exec',        // URL del Web App de Apps Script (termina en /exec)
+  SCRIPT_URL:'https://script.google.com/macros/s/AKfycbzavsQuzBeJC_aVtjD2vNrOUNHgZF475nmaMgYRrgH6p1yt1sAjHrgJH9SgnLxvYVKs/exec',        // URL del Web App de Apps Script (termina en /exec)
   SPREADSHEET_ID:'1Lz19FsXfgJG_oI6aM_vvwv_egehUrtWjCLgi300LmSE',    // ID de tu hoja (lo que va entre /d/ y /edit en la URL)
   TOKEN:'Lizalfa2' // debe ser igual al TOKEN de Code.gs
 };
-
-
 /* ===== MÓDULO: Store (Google Sheets vía Apps Script) ===== */
 const Store={
   data:{products:[],clients:[],sales:[]},ready:false,timer:null,
@@ -105,24 +103,30 @@ const Catalog={
   get:id=>Store.data.products.find(p=>p.id===id),
   update(id,f){Object.assign(this.get(id),f);Store.save()},
   remove(id){Store.data.products=Store.data.products.filter(p=>p.id!==id);Store.save()},
+  uniq:k=>[...new Set(Store.data.products.map(p=>p[k]).filter(Boolean))].sort(),
   categories:()=>[...new Set(Store.data.products.map(p=>p.cat))].sort(),
   view(){
     const ps=Store.data.products;
     return `<div class="card"><h2>Agregar mueble al catálogo</h2><div class="row">
       <label>Nombre<input id="pn"></label><label>Tipo / categoría<input id="pc" list="cats" placeholder="Sala, Comedor…"></label>
+      <label>Madera<input id="pm" list="mads" placeholder="Pino, Encino…"></label><label>Tela<input id="pt" list="tels" placeholder="Lino, Piel…"></label>
       <label>Precio<input id="pp" type="number" min="0"></label><label>Stock<input id="ps" type="number" min="0" value="1"></label>
       <button class="btn" onclick="Catalog.ui.add()">Agregar</button></div>
-      <datalist id="cats">${this.categories().map(c=>`<option value="${U.esc(c)}">`).join('')}</datalist></div>
-    <div class="card"><h2>Catálogo (${ps.length})</h2><div class="tw"><table><tr><th>Mueble</th><th>Tipo</th><th class="r">Precio</th><th class="r">Stock</th><th></th></tr>
-    ${ps.map(p=>`<tr><td>${U.esc(p.name)}</td><td><span class="tag">${U.esc(p.cat)}</span></td>
+      <datalist id="cats">${this.categories().map(c=>`<option value="${U.esc(c)}">`).join('')}</datalist>
+      <datalist id="mads">${this.uniq('madera').map(c=>`<option value="${U.esc(c)}">`).join('')}</datalist>
+      <datalist id="tels">${this.uniq('tela').map(c=>`<option value="${U.esc(c)}">`).join('')}</datalist></div>
+    <div class="card"><h2>Catálogo (${ps.length})</h2><div class="tw"><table><tr><th>Mueble</th><th>Tipo</th><th>Madera</th><th>Tela</th><th class="r">Precio</th><th class="r">Stock</th><th></th></tr>
+    ${ps.map(p=>`<tr><td>${U.esc(p.name)}</td><td><input style="min-width:110px" list="cats" value="${U.esc(p.cat)}" onchange="Catalog.update('${p.id}',{cat:this.value.trim()||'General'});U.toast('Tipo actualizado')"></td>
+      <td><input style="min-width:100px" list="mads" value="${U.esc(p.madera||'')}" onchange="Catalog.update('${p.id}',{madera:this.value.trim()});U.toast('Madera actualizada')"></td>
+      <td><input style="min-width:100px" list="tels" value="${U.esc(p.tela||'')}" onchange="Catalog.update('${p.id}',{tela:this.value.trim()});U.toast('Tela actualizada')"></td>
       <td class="r"><input style="width:110px;text-align:right" type="number" value="${p.price}" onchange="Catalog.update('${p.id}',{price:+this.value});U.toast('Precio actualizado')"></td>
       <td class="r ${p.stock<=2?'low':''}"><input style="width:80px;text-align:right" type="number" value="${p.stock}" onchange="Catalog.update('${p.id}',{stock:+this.value});App.render()"></td>
-      <td class="r"><button class="btn d s" onclick="Catalog.ui.del('${p.id}')">Eliminar</button></td></tr>`).join('')||'<tr><td colspan=5 class="empty">Sin muebles</td></tr>'}
+      <td class="r"><button class="btn d s" onclick="Catalog.ui.del('${p.id}')">Eliminar</button></td></tr>`).join('')||'<tr><td colspan=7 class="empty">Sin muebles</td></tr>'}
     </table></div><small style="color:var(--mut)">Stock en rojo = 2 piezas o menos.</small></div>`},
   ui:{
-    add(){const name=U.$('pn').value.trim(),cat=U.$('pc').value.trim()||'General',price=+U.$('pp').value,stock=+U.$('ps').value;
+    add(){const name=U.$('pn').value.trim(),cat=U.$('pc').value.trim()||'General',madera=U.$('pm').value.trim(),tela=U.$('pt').value.trim(),price=+U.$('pp').value,stock=+U.$('ps').value;
       if(!name||price<=0)return U.toast('Nombre y precio son requeridos');
-      Catalog.add({name,cat,price,stock});App.render()},
+      Catalog.add({name,cat,madera,tela,price,stock});App.render()},
     del(id){if(confirm('¿Eliminar este mueble del catálogo?')){Catalog.remove(id);App.render()}}
   }
 };
@@ -178,9 +182,9 @@ const Sales={
       :'<small style="color:var(--mut)">Con 0 plazos el saldo queda abierto, sin calendario.</small>'}</div>`},
   list(){ // catálogo filtrado por lo que se escribe (sin acentos ni mayúsculas)
     const n=t=>String(t).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(),q=n(this.q).trim();
-    const ps=Store.data.products.filter(p=>!q||n(p.name+' '+p.cat).includes(q));
+    const ps=Store.data.products.filter(p=>!q||n(p.name+' '+p.cat+' '+(p.madera||'')+' '+(p.tela||'')).includes(q));
     return ps.map(p=>`<div class="pi ${p.stock<1?'off':''}" ${p.stock>0?`onclick="Sales.ui.addItem('${p.id}')"`:''}>
-      <div><b>${U.esc(p.name)}</b><br><span class="tag">${U.esc(p.cat)}</span> <small class="${p.stock<=2?'low':''}">${p.stock>0?'stock '+p.stock:'Agotado'}</small></div>
+      <div><b>${U.esc(p.name)}</b><br><span class="tag">${U.esc(p.cat)}</span> ${(p.madera||p.tela)?`<small style="color:var(--mut)">${U.esc([p.madera,p.tela].filter(Boolean).join(' · '))}</small> `:''}<small class="${p.stock<=2?'low':''}">${p.stock>0?'stock '+p.stock:'Agotado'}</small></div>
       <div class="r"><b>${U.money(p.price)}</b><br><small style="color:var(--pk2)">${p.stock>0?'+ Agregar':''}</small></div></div>`).join('')
       ||'<div class="empty">Sin resultados para «'+U.esc(this.q)+'»</div>'},
   view(){
@@ -193,7 +197,7 @@ const Sales={
       ${this.newCli?`<div class="row" style="background:var(--soft);padding:10px;border-radius:12px">
         <label>Nombre<input id="qn"></label><label>Teléfono<input id="qt"></label><label>Dirección<input id="qa"></label>
         <button class="btn" onclick="Sales.ui.addClient()">Guardar y usar</button></div>`:''}
-      <div class="row"><label>🔎 Buscar mueble (nombre o tipo)<input id="sb" type="search" placeholder="Ej. sofá, recámara, mesa…" value="${U.esc(this.q)}" oninput="Sales.ui.search(this.value)"></label>
+      <div class="row"><label>🔎 Buscar mueble (nombre, tipo, madera o tela)<input id="sb" type="search" placeholder="Ej. sofá, recámara, mesa…" value="${U.esc(this.q)}" oninput="Sales.ui.search(this.value)"></label>
       <label style="max-width:90px">Cantidad<input id="sq" type="number" min="1" value="1"></label></div>
       <div id="plist" class="plist">${this.list()}</div>
       <div class="tw"><table><tr><th>Pieza</th><th class="r">Cant.</th><th class="r">Precio</th><th class="r">Subtotal</th><th></th></tr>
