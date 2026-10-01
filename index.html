@@ -57,7 +57,7 @@ td{padding:8px;border-bottom:1px solid var(--line);vertical-align:middle}
 <script>
 /* ===== CONFIGURACIÓN: datos de tu Google Sheets ===== */
 const CONFIG={
-  SCRIPT_URL:'https://script.google.com/macros/s/AKfycby5x_smX_0QJT9GsIzd6mxLvdZ3mYbk3McLj9hTgE8Po1DqujNw-jI2xkRYCUFeXn_0/exec',
+  SCRIPT_URL:'https://script.google.com/macros/s/AKfycbz4WB11weturit6RcqILs0ybA2SCYv_FeAJ22R5L9WlIRTH86A60wbtGav7w8Qo-W7Z/exec',
   SPREADSHEET_ID:'1Lz19FsXfgJG_oI6aM_vvwv_egehUrtWjCLgi300LmSE',
   TOKEN:'Lizalfa2' // debe ser igual al TOKEN de Code.gs
 };
@@ -324,7 +324,7 @@ const History={
       <div class="r"><b>${U.money(s.total)}</b><br><small>Pagado ${U.money(Sales.paid(s))}</small></div>
       <div><span class="pill ${b>0?'bad':'ok'}">${b>0?'Saldo '+U.money(b):'Liquidada'}</span><br>
         ${s.payments.map(p=>`<span class="tag" style="font-size:11px">${METHODS[p.method].split(' ')[0]} ${U.money(p.amount)}</span>`).join(' ')}</div>
-      <div class="r">${b>0?`<button class="btn s" onclick="Collections.open('${s.id}')">Abonar</button> `:''}<button class="btn d s" onclick="Sales.ui.cancel('${s.id}')">Cancelar</button></div></div>`).join('')||'<div class="empty">Sin ventas con esos filtros</div>'}`},
+      <div class="r">${b>0?`<button class="btn s" onclick="Collections.open('${s.id}')">Abonar</button> `:''}<button class="btn d s" onclick="Sales.ui.cancel('${s.id}')">Cancelar</button></div></div>`}).join('')||'<div class="empty">Sin ventas con esos filtros</div>'}`},
   view(){
     const f=this.f;
     return `<div class="card"><h2>Historial de ventas</h2>
