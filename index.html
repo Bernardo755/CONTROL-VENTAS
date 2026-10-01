@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -77,7 +76,7 @@ details.rep>.tw{padding:0 16px 14px}
 <script>
 /* ===== CONFIGURACIÓN: datos de tu Google Sheets ===== */
 const CONFIG={
-  SCRIPT_URL:'https://script.google.com/macros/s/AKfycbz4WB11weturit6RcqILs0ybA2SCYv_FeAJ22R5L9WlIRTH86A60wbtGav7w8Qo-W7Z/exec',
+  SCRIPT_URL:'https://script.google.com/macros/s/AKfycbzwhmH8JnpmQrN53xIwpp-4ISjwByS1pt3tiCHO2eu77NYpkgSOXN5ZMXLUOejjsBxN/exec',
   SPREADSHEET_ID:'1Lz19FsXfgJG_oI6aM_vvwv_egehUrtWjCLgi300LmSE',
   TOKEN:'Lizalfa2' // debe ser igual al TOKEN de Code.gs
 };
@@ -194,7 +193,7 @@ const Clients={
     <div class="card"><h2>Clientes (${cs.length})</h2><div class="tw"><table><tr><th>Nombre</th><th>Teléfono</th><th>Dirección</th><th>Registro</th><th class="r">Compras</th><th class="r">Saldo</th><th></th></tr>
     ${cs.map(c=>{const v=S.filter(s=>s.clientId===c.id);return `<tr><td>${U.esc(c.name)}</td><td>${U.esc(c.phone)}</td><td>${U.esc(c.addr)}</td>
       <td>${U.esc(c.created||'—')}</td>
-      <td class="r">${U.money(v.reduce((a,s)=>a+s.total,0))}</td><td class="r ${v.some(s=>Sales.balance(s)>0)?'low':''}">${U.money(v.reduce((a,s)=>a+Sales.balance(s),0))}</td>
+      <td class="r">${U.money(v.reduce((a,s)=>a+Sales.net(s),0))}</td><td class="r ${v.some(s=>Sales.balance(s)>0)?'low':''}">${U.money(v.reduce((a,s)=>a+Sales.balance(s),0))}</td>
       <td class="r"><button class="btn d s" onclick="Clients.ui.del('${c.id}')">Eliminar</button></td></tr>`}).join('')||'<tr><td colspan=7 class="empty">Sin clientes</td></tr>'}
     </table></div></div>`},
   ui:{
@@ -211,7 +210,10 @@ const Clients={
 /* ===== MÓDULO: Ventas ===== */
 const Sales={
   cart:[],pays:[],cid:'',date:'',newCli:false,q:'',obs:'',plan:{n:0,freq:'semanal',start:''},
-  paid:s=>s.payments.reduce((a,p)=>a+p.amount,0), // incluye donaciones: liquidan saldo
+  paid:s=>s.payments.reduce((a,p)=>a+p.amount,0), // TODO lo aplicado a la venta (incluye donación): sirve solo para calcular saldo
+  don:s=>s.payments.filter(p=>p.method==='donacion').reduce((a,p)=>a+p.amount,0), // donado: no es ingreso ni deuda
+  income:s=>U.r2(Sales.paid(s)-Sales.don(s)), // dinero realmente cobrado
+  net:s=>U.r2(s.total-Sales.don(s)), // venta neta = total sin la parte donada
   balance(s){return Math.max(0,U.r2(s.total-this.paid(s)))},
   total(){return this.cart.reduce((a,i)=>a+i.qty*i.price,0)},
   create(clientId){
@@ -348,7 +350,7 @@ const History={
       <div>${U.esc(Clients.name(s.clientId))}${s.obs?`<br><small>📝 ${U.esc(s.obs)}</small>`:''}</div>
       <div class="hitems">${s.items.map(i=>`<span>${i.qty}× ${U.esc(i.name)}${i.disc>0?` <small>(-${U.money(i.disc)} c/u)</small>`:''}</span>`).join('')}</div>
       <div class="r num"><span class="lb">Total</span><b>${U.money(s.total)}</b></div>
-      <div class="r num"><span class="lb">Pagado</span><b>${U.money(Sales.paid(s))}</b>
+      <div class="r num"><span class="lb">Pagado</span><b>${U.money(Sales.income(s))}</b>
         ${s.payments.map(p=>`<div class="pm">${METHODS[p.method].split(' ')[0]} ${U.money(p.amount)}</div>`).join('')}</div>
       <div class="est"><span class="pill ${b>0?'bad':'ok'}">${b>0?'Con saldo':'Liquidada'}</span>${b>0?`<div class="pm">Debe ${U.money(b)}</div>`:''}</div>
       <div class="acts">${b>0?`<button class="btn s" onclick="Collections.open('${s.id}')">Abonar</button>`:''}<button class="btn d s" onclick="Sales.ui.cancel('${s.id}')">Cancelar</button></div></div>`}).join('')||'<div class="empty">Sin ventas con esos filtros</div>'}`},
@@ -406,7 +408,7 @@ const Collections={
   detail(){
     const s=this.cur();if(!s)return '';const bal=Sales.balance(s),nd=Sales.nextDue(s),pl=s.plan||[];
     return `<div class="card" id="det"><h2>Abonos · ${U.esc(Clients.name(s.clientId))} · venta del ${s.date}</h2>
-      <p>Total <b>${U.money(s.total)}</b> · Pagado <b>${U.money(Sales.paid(s))}</b> · Saldo <b class="${bal>0?'low':'ok'}">${U.money(bal)}</b></p>
+      <p>Total <b>${U.money(s.total)}</b> · Pagado <b>${U.money(Sales.income(s))}</b>${Sales.don(s)>0?` · Donado <b>${U.money(Sales.don(s))}</b>`:''} · Saldo <b class="${bal>0?'low':'ok'}">${U.money(bal)}</b></p>
       <small style="color:var(--mut)">${s.items.map(i=>`${i.qty}× ${U.esc(i.name)}`).join(', ')}</small>
       ${pl.length?`<div class="tw"><table><tr><th>#</th><th>Vence</th><th class="r">Monto</th><th class="r">Pagado</th><th class="r">Pendiente</th><th>Estado</th></tr>
         ${pl.map((i,k)=>{const st=Sales.instStatus(i);return `<tr><td>${i.n}</td>
@@ -454,7 +456,7 @@ const Reports={
     const max=Math.max(1,...data.map(d=>d[1]));
     return `<details class="card rep" ${this.openSet.has(title)?'open':''} ontoggle="Reports.tog(this.dataset.t,this.open)" data-t="${U.esc(title)}"><summary>${title} <small>(${data.length})</small></summary><div class="tw" style="margin-top:8px"><table>${data.map(([k,v])=>`<tr><td>${fmt(k)}</td><td style="width:35%"><div class="bar"><i style="width:${Math.max(0,v)/max*100}%"></i></div></td><td class="r"><b>${vf(v)}</b></td></tr>`).join('')||'<tr><td class="empty">Sin datos</td></tr>'}</table></div></details>`},
   view(){
-    const S=this.filtered(),total=S.reduce((a,s)=>a+s.total,0),inR=d=>(!this.from||d>=this.from)&&(!this.to||d<=this.to),
+    const S=this.filtered(),total=S.reduce((a,s)=>a+Sales.net(s),0),inR=d=>(!this.from||d>=this.from)&&(!this.to||d<=this.to),
       PY=Store.data.sales.flatMap(s=>s.payments.filter(p=>inR(p.date))),
       ING=PY.filter(p=>p.method!=='donacion'),DON=PY.filter(p=>p.method==='donacion'), // las donaciones NO son ingreso
       cobrado=ING.reduce((a,p)=>a+p.amount,0),donado=DON.reduce((a,p)=>a+p.amount,0),
@@ -462,16 +464,17 @@ const Reports={
       piezas=S.reduce((a,s)=>a+s.items.reduce((x,i)=>x+i.qty,0),0),
       descuentos=S.reduce((a,s)=>a+s.items.reduce((x,i)=>x+i.qty*(i.disc||0),0),0),
       ticket=S.length?total/S.length:0;
-    const items=S.flatMap(s=>s.items.map(i=>({...i,date:s.date,client:Clients.name(s.clientId)})));
+    const DONS=Store.data.sales.flatMap(s=>s.payments.filter(p=>p.method==='donacion'&&inR(p.date)).map(p=>[Clients.name(s.clientId),p.amount]));
+    const items=S.flatMap(s=>{const f=s.total>0?Sales.net(s)/s.total:1;return s.items.map(i=>({...i,net:i.qty*i.price*f,date:s.date,client:Clients.name(s.clientId)}))}); // valor sin la parte donada
     const prod=i=>Catalog.get(i.pid)||{};
-    const byDay=this.group(S.map(s=>[s.date,s.total])).sort((a,b)=>b[0].localeCompare(a[0]));
-    const byMonth=this.group(S.map(s=>[s.date.slice(0,7),s.total])).sort((a,b)=>b[0].localeCompare(a[0]));
+    const byDay=this.group(S.map(s=>[s.date,Sales.net(s)])).sort((a,b)=>b[0].localeCompare(a[0]));
+    const byMonth=this.group(S.map(s=>[s.date.slice(0,7),Sales.net(s)])).sort((a,b)=>b[0].localeCompare(a[0]));
     const DOW=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
-    const byDow=this.group(S.map(s=>[DOW[U.d(s.date).getDay()],s.total]));
-    const byMethod=this.group(PY.map(p=>[p.method,p.amount])),byPayDay=this.group(ING.map(p=>[p.date,p.amount])).sort((a,b)=>b[0].localeCompare(a[0]));
-    const byClient=this.group(S.map(s=>[Clients.name(s.clientId),s.total]));
-    const byCat=this.group(items.map(i=>[i.cat,i.qty*i.price]));
-    const byItem=this.group(items.map(i=>[i.name,i.qty*i.price]));
+    const byDow=this.group(S.map(s=>[DOW[U.d(s.date).getDay()],Sales.net(s)]));
+    const byMethod=this.group(ING.map(p=>[p.method,p.amount])),byPayDay=this.group(ING.map(p=>[p.date,p.amount])).sort((a,b)=>b[0].localeCompare(a[0]));
+    const byClient=this.group(S.map(s=>[Clients.name(s.clientId),Sales.net(s)]));
+    const byCat=this.group(items.map(i=>[i.cat,i.net]));
+    const byItem=this.group(items.map(i=>[i.name,i.net]));
     const byUnits=this.group(items.map(i=>[i.name,i.qty]));
     const byDisc=this.group(items.filter(i=>i.disc>0).map(i=>[i.name,i.qty*i.disc]));
     const saldoCli=this.group(Store.data.sales.filter(s=>Sales.balance(s)>0).map(s=>[Clients.name(s.clientId),Sales.balance(s)]));
@@ -487,13 +490,13 @@ const Reports={
       <label>Hasta<input type="date" value="${this.to}" onchange="Reports.to=this.value;App.render()"></label>
       <button class="btn g" onclick="Reports.from=Reports.to=U.today();App.render()">Hoy</button>
       <button class="btn g" onclick="Reports.from=Reports.to='';App.render()">Todo</button></div></div>
-    <div class="grid" style="margin-bottom:14px"><div class="kpi"><small>Vendido</small><b>${U.money(total)}</b></div>
+    <div class="grid" style="margin-bottom:14px"><div class="kpi"><small>Ventas netas (sin donaciones)</small><b>${U.money(total)}</b></div>
       <div class="kpi"><small>Ingreso cobrado (sin donaciones)</small><b>${U.money(cobrado)}</b></div><div class="kpi"><small>Donaciones</small><b>${U.money(donado)}</b></div>
       <div class="kpi"><small>Por cobrar (total)</small><b>${U.money(porCobrar)}</b></div><div class="kpi"><small>Vencido</small><b style="color:var(--bad)">${U.money(vencido)}</b></div>
       <div class="kpi"><small>Piezas vendidas</small><b>${piezas}</b></div><div class="kpi"><small>Ticket promedio</small><b>${U.money(ticket)}</b></div>
       <div class="kpi"><small>Descuentos otorgados</small><b>${U.money(descuentos)}</b></div><div class="kpi"><small>Valor en inventario</small><b>${U.money(stockVal)}</b></div></div>
     <div class="two">${this.block('📅 Por día',byDay)}${this.block('🗓️ Por mes',byMonth)}${this.block('📆 Por día de la semana',byDow)}
-    ${this.block('💳 Por método de pago (incluye donación)',byMethod,k=>METHODS[k])}${this.block('💰 Ingreso cobrado por día',byPayDay)}${this.block('👤 Por cliente',byClient)}
+    ${this.block('💳 Ingreso por método de pago',byMethod,k=>METHODS[k])}${this.block('🎁 Donaciones por cliente',this.group(DONS))}${this.block('💰 Ingreso cobrado por día',byPayDay)}${this.block('👤 Por cliente',byClient)}
     ${this.block('🛋️ Por tipo de mueble',byCat)}
     ${this.block('🏷️ Descuentos por mueble',byDisc)}${this.block('📈 Piezas vendidas por mueble',byUnits,undefined,pz)}
     ${this.block('⚠️ Saldo pendiente por cliente',saldoCli)}${this.block('⏳ Antigüedad de saldo vencido',Object.entries(aging))}
