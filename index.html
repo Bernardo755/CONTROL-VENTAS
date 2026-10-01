@@ -21,8 +21,8 @@ h2{margin:0 0 12px;font-size:17px}h3{margin:0 0 8px;font-size:15px;color:var(--p
 .kpi small{color:var(--mut)}.kpi b{display:block;font-size:22px;color:var(--pk2)}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-bottom:8px}
 label{font-size:12px;color:var(--mut);display:flex;flex-direction:column;gap:3px;flex:1;min-width:110px}
-input,select{padding:9px 10px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);font:inherit;width:100%}
-input:focus,select:focus{outline:2px solid var(--pk);border-color:transparent}
+input,select,textarea{padding:9px 10px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);font:inherit;width:100%}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--pk);border-color:transparent}
 .btn{border:0;background:var(--pk);color:#fff;padding:9px 16px;border-radius:10px;font-weight:600;cursor:pointer}
 .btn:hover{background:var(--pk2)}.btn.g{background:var(--soft);color:var(--pk2)}.btn.s{padding:5px 10px;font-size:12px}.btn.d{background:#fff0f3;color:var(--bad)}
 .tw{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:14px}
@@ -37,11 +37,31 @@ td{padding:8px;border-bottom:1px solid var(--line);vertical-align:middle}
 .plist{max-height:270px;overflow-y:auto;border:1px solid var(--line);border-radius:12px;margin-bottom:10px}.pi{display:flex;justify-content:space-between;gap:10px;padding:9px 12px;border-bottom:1px solid var(--line);cursor:pointer}.pi:hover{background:var(--soft)}.pi.off{opacity:.45;cursor:not-allowed}
 .toast{position:fixed;bottom:calc(20px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);background:var(--pk2);color:#fff;padding:10px 18px;border-radius:99px;font-weight:600;z-index:9}
 .empty{color:var(--mut);padding:14px;text-align:center}
+
+/* ===== Nuevo: historial moderno ===== */
+.hrow{display:grid;grid-template-columns:110px 1.2fr 2fr 1fr 1fr auto;gap:12px;align-items:center;padding:12px 6px;border-bottom:1px solid var(--line)}
+.hrow.hd{color:var(--mut);font-size:12px;font-weight:600;padding:6px}
+.hrow:not(.hd):hover{background:var(--soft);border-radius:12px}
+.hrow small{color:var(--mut)}
+.pill{display:inline-block;padding:3px 10px;border-radius:99px;font-size:12px;font-weight:700}
+.pill.ok{background:#e4f6ee;color:var(--ok)}.pill.bad{background:#fff0f3;color:var(--bad)}
+.hitems{display:flex;flex-direction:column;gap:2px;font-size:13px}
+.hsum{color:var(--mut);font-size:13px;margin:4px 0 8px}
+@media(max-width:760px){.hrow{grid-template-columns:1fr 1fr}.hrow.hd{display:none}}
+
+/* ===== Alerta de cobranza ===== */
+.alert{background:#fff7e6;border-color:#f5d48a}
 </style></head><body>
 <header><h1>🌸 Mueblería Rosa</h1><p>Ventas, inventario y reportes en un solo lugar</p><span id="st" class="chip">…</span> <button class="chip" style="border:0;cursor:pointer" onclick="App.refresh()">↻ Actualizar</button></header>
 <nav id="nav"></nav><main id="app"></main>
-
 <script>
+/* ===== CONFIGURACIÓN: datos de tu Google Sheets ===== */
+const CONFIG={
+  SCRIPT_URL:'https://script.google.com/macros/s/AKfycby5x_smX_0QJT9GsIzd6mxLvdZ3mYbk3McLj9hTgE8Po1DqujNw-jI2xkRYCUFeXn_0/exec',
+  SPREADSHEET_ID:'1Lz19FsXfgJG_oI6aM_vvwv_egehUrtWjCLgi300LmSE',
+  TOKEN:'Lizalfa2' // debe ser igual al TOKEN de Code.gs
+};
+
 /* ===== MÓDULO: Utilidades ===== */
 const U={
   money:n=>new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN'}).format(n||0),
@@ -55,17 +75,13 @@ const U={
     else dt.setDate(dt.getDate()+k*(freq==='semanal'?7:15));return U.f(dt)},
   uid:()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6),
   $:id=>document.getElementById(id),
+  norm:t=>String(t??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(), // sin acentos/mayúsculas
   toast(m){const t=document.createElement('div');t.className='toast';t.textContent=m;document.body.append(t);setTimeout(()=>t.remove(),2200)}
 };
 const FREQ={semanal:'Semanal',quincenal:'Quincenal',mensual:'Mensual'};
-const METHODS={efectivo:'💵 Efectivo',transferencia:'🏦 Transferencia',tarjeta:'💳 Tarjeta'};
+// 'donacion' liquida saldo (no es deuda) pero NO cuenta como ingreso en reportes
+const METHODS={efectivo:'💵 Efectivo',transferencia:'🏦 Transferencia',tarjeta:'💳 Tarjeta',donacion:'🎁 Donación'};
 
-/* ===== CONFIGURACIÓN: pega aquí los datos de tu Google Sheets ===== */
-const CONFIG={
-  SCRIPT_URL:'https://script.google.com/macros/s/AKfycbzavsQuzBeJC_aVtjD2vNrOUNHgZF475nmaMgYRrgH6p1yt1sAjHrgJH9SgnLxvYVKs/exec',        // URL del Web App de Apps Script (termina en /exec)
-  SPREADSHEET_ID:'1Lz19FsXfgJG_oI6aM_vvwv_egehUrtWjCLgi300LmSE',    // ID de tu hoja (lo que va entre /d/ y /edit en la URL)
-  TOKEN:'Lizalfa2' // debe ser igual al TOKEN de Code.gs
-};
 /* ===== MÓDULO: Store (Google Sheets vía Apps Script) ===== */
 const Store={
   data:{products:[],clients:[],sales:[]},ready:false,timer:null,
@@ -99,12 +115,25 @@ const Store={
 
 /* ===== MÓDULO: Catálogo / Inventario ===== */
 const Catalog={
+  q:'', // texto del buscador
   add(p){Store.data.products.push({id:U.uid(),...p});Store.save()},
   get:id=>Store.data.products.find(p=>p.id===id),
   update(id,f){Object.assign(this.get(id),f);Store.save()},
   remove(id){Store.data.products=Store.data.products.filter(p=>p.id!==id);Store.save()},
   uniq:k=>[...new Set(Store.data.products.map(p=>p[k]).filter(Boolean))].sort(),
   categories:()=>[...new Set(Store.data.products.map(p=>p.cat))].sort(),
+  filtered(){const q=U.norm(this.q).trim();
+    return Store.data.products.filter(p=>!q||U.norm([p.name,p.cat,p.madera,p.tela].join(' ')).includes(q))},
+  rows(){
+    const ps=this.filtered();
+    return ps.map(p=>`<tr><td>${U.esc(p.name)}</td><td><input style="min-width:110px" list="cats" value="${U.esc(p.cat)}" onchange="Catalog.update('${p.id}',{cat:this.value.trim()||'General'});U.toast('Tipo actualizado')"></td>
+      <td><input style="min-width:100px" list="mads" value="${U.esc(p.madera||'')}" onchange="Catalog.update('${p.id}',{madera:this.value.trim()});U.toast('Madera actualizada')"></td>
+      <td><input style="min-width:100px" list="tels" value="${U.esc(p.tela||'')}" onchange="Catalog.update('${p.id}',{tela:this.value.trim()});U.toast('Tela actualizada')"></td>
+      <td class="r"><input style="width:110px;text-align:right" type="number" value="${p.price}" onchange="Catalog.update('${p.id}',{price:+this.value});U.toast('Precio actualizado')"></td>
+      <td class="r ${p.stock<=2?'low':''}"><input style="width:80px;text-align:right" type="number" value="${p.stock}" onchange="Catalog.update('${p.id}',{stock:+this.value});App.render()"></td>
+      <td class="r" style="white-space:nowrap"><input id="sa-${p.id}" type="number" min="1" value="1" style="width:64px;display:inline-block"> <button class="btn g s" onclick="Catalog.ui.addStock('${p.id}')">+ Stock</button></td>
+      <td class="r"><button class="btn d s" onclick="Catalog.ui.del('${p.id}')">Eliminar</button></td></tr>`).join('')
+      ||'<tr><td colspan=8 class="empty">Sin muebles'+(this.q?' para «'+U.esc(this.q)+'»':'')+'</td></tr>'},
   view(){
     const ps=Store.data.products;
     return `<div class="card"><h2>Agregar mueble al catálogo</h2><div class="row">
@@ -115,54 +144,64 @@ const Catalog={
       <datalist id="cats">${this.categories().map(c=>`<option value="${U.esc(c)}">`).join('')}</datalist>
       <datalist id="mads">${this.uniq('madera').map(c=>`<option value="${U.esc(c)}">`).join('')}</datalist>
       <datalist id="tels">${this.uniq('tela').map(c=>`<option value="${U.esc(c)}">`).join('')}</datalist></div>
-    <div class="card"><h2>Catálogo (${ps.length})</h2><div class="tw"><table><tr><th>Mueble</th><th>Tipo</th><th>Madera</th><th>Tela</th><th class="r">Precio</th><th class="r">Stock</th><th></th></tr>
-    ${ps.map(p=>`<tr><td>${U.esc(p.name)}</td><td><input style="min-width:110px" list="cats" value="${U.esc(p.cat)}" onchange="Catalog.update('${p.id}',{cat:this.value.trim()||'General'});U.toast('Tipo actualizado')"></td>
-      <td><input style="min-width:100px" list="mads" value="${U.esc(p.madera||'')}" onchange="Catalog.update('${p.id}',{madera:this.value.trim()});U.toast('Madera actualizada')"></td>
-      <td><input style="min-width:100px" list="tels" value="${U.esc(p.tela||'')}" onchange="Catalog.update('${p.id}',{tela:this.value.trim()});U.toast('Tela actualizada')"></td>
-      <td class="r"><input style="width:110px;text-align:right" type="number" value="${p.price}" onchange="Catalog.update('${p.id}',{price:+this.value});U.toast('Precio actualizado')"></td>
-      <td class="r ${p.stock<=2?'low':''}"><input style="width:80px;text-align:right" type="number" value="${p.stock}" onchange="Catalog.update('${p.id}',{stock:+this.value});App.render()"></td>
-      <td class="r"><button class="btn d s" onclick="Catalog.ui.del('${p.id}')">Eliminar</button></td></tr>`).join('')||'<tr><td colspan=7 class="empty">Sin muebles</td></tr>'}
-    </table></div><small style="color:var(--mut)">Stock en rojo = 2 piezas o menos.</small></div>`},
+    <div class="card"><h2>Catálogo (<span id="ccount">${this.filtered().length}</span> de ${ps.length})</h2>
+      <div class="row"><label>🔎 Buscar en el catálogo (nombre, tipo, madera o tela)<input id="cq" type="search" placeholder="Ej. sofá, pino…" value="${U.esc(this.q)}" oninput="Catalog.ui.search(this.value)"></label></div>
+      <div class="tw"><table><tr><th>Mueble</th><th>Tipo</th><th>Madera</th><th>Tela</th><th class="r">Precio</th><th class="r">Stock</th><th class="r">Sumar stock</th><th></th></tr>
+      <tbody id="cbody">${this.rows()}</tbody></table></div><small style="color:var(--mut)">Stock en rojo = 2 piezas o menos.</small></div>`},
   ui:{
     add(){const name=U.$('pn').value.trim(),cat=U.$('pc').value.trim()||'General',madera=U.$('pm').value.trim(),tela=U.$('pt').value.trim(),price=+U.$('pp').value,stock=+U.$('ps').value;
       if(!name||price<=0)return U.toast('Nombre y precio son requeridos');
       Catalog.add({name,cat,madera,tela,price,stock});App.render()},
-    del(id){if(confirm('¿Eliminar este mueble del catálogo?')){Catalog.remove(id);App.render()}}
+    del(id){if(confirm('¿Eliminar este mueble del catálogo (descontinuado)? Las ventas anteriores conservan su registro.')){Catalog.remove(id);App.render()}},
+    search(v){Catalog.q=v;U.$('cbody').innerHTML=Catalog.rows();U.$('ccount').textContent=Catalog.filtered().length},
+    addStock(id){const q=Math.floor(+U.$('sa-'+id).value);if(!(q>0))return U.toast('Escribe una cantidad válida');
+      const p=Catalog.get(id);Catalog.update(id,{stock:(+p.stock||0)+q});U.toast('+'+q+' al stock de '+p.name);
+      U.$('cbody').innerHTML=Catalog.rows()}
   }
 };
 
 /* ===== MÓDULO: Clientes ===== */
 const Clients={
-  add(c){const n={id:U.uid(),...c};Store.data.clients.push(n);Store.save();return n},
+  add(c){const n={id:U.uid(),created:U.today(),...c};Store.data.clients.push(n);Store.save();return n},
   get:id=>Store.data.clients.find(c=>c.id===id),
   name(id){return this.get(id)?.name||'Mostrador'},
+  remove(id){Store.data.clients=Store.data.clients.filter(c=>c.id!==id);Store.save()},
   view(){
     const cs=Store.data.clients,S=Store.data.sales;
     return `<div class="card"><h2>Nuevo cliente</h2><div class="row">
       <label>Nombre<input id="cn"></label><label>Teléfono<input id="ct"></label><label>Dirección<input id="ca"></label>
       <button class="btn" onclick="Clients.ui.add()">Guardar</button></div></div>
-    <div class="card"><h2>Clientes (${cs.length})</h2><div class="tw"><table><tr><th>Nombre</th><th>Teléfono</th><th>Dirección</th><th class="r">Compras</th><th class="r">Saldo</th></tr>
+    <div class="card"><h2>Clientes (${cs.length})</h2><div class="tw"><table><tr><th>Nombre</th><th>Teléfono</th><th>Dirección</th><th>Registro</th><th class="r">Compras</th><th class="r">Saldo</th><th></th></tr>
     ${cs.map(c=>{const v=S.filter(s=>s.clientId===c.id);return `<tr><td>${U.esc(c.name)}</td><td>${U.esc(c.phone)}</td><td>${U.esc(c.addr)}</td>
-      <td class="r">${U.money(v.reduce((a,s)=>a+s.total,0))}</td><td class="r ${v.some(s=>Sales.balance(s)>0)?'low':''}">${U.money(v.reduce((a,s)=>a+Sales.balance(s),0))}</td></tr>`}).join('')||'<tr><td colspan=5 class="empty">Sin clientes</td></tr>'}
+      <td>${U.esc(c.created||'—')}</td>
+      <td class="r">${U.money(v.reduce((a,s)=>a+s.total,0))}</td><td class="r ${v.some(s=>Sales.balance(s)>0)?'low':''}">${U.money(v.reduce((a,s)=>a+Sales.balance(s),0))}</td>
+      <td class="r"><button class="btn d s" onclick="Clients.ui.del('${c.id}')">Eliminar</button></td></tr>`}).join('')||'<tr><td colspan=7 class="empty">Sin clientes</td></tr>'}
     </table></div></div>`},
-  ui:{add(){const name=U.$('cn').value.trim();if(!name)return U.toast('Escribe el nombre');
-    Clients.add({name,phone:U.$('ct').value,addr:U.$('ca').value});App.render()}}
+  ui:{
+    add(){const name=U.$('cn').value.trim();if(!name)return U.toast('Escribe el nombre');
+      Clients.add({name,phone:U.$('ct').value,addr:U.$('ca').value});App.render()},
+    del(id){
+      const debt=Store.data.sales.filter(s=>s.clientId===id).reduce((a,s)=>a+Sales.balance(s),0);
+      if(debt>0)return U.toast('No se puede eliminar: tiene saldo pendiente ('+U.money(debt)+')');
+      if(!confirm('¿Eliminar este cliente? Sus ventas pasadas aparecerán como «Mostrador».'))return;
+      Clients.remove(id);if(Sales.cid===id)Sales.cid='';App.render()}
+  }
 };
 
 /* ===== MÓDULO: Ventas ===== */
 const Sales={
-  cart:[],pays:[],cid:'',date:'',newCli:false,q:'',plan:{n:0,freq:'semanal',start:''},
-  paid:s=>s.payments.reduce((a,p)=>a+p.amount,0),
+  cart:[],pays:[],cid:'',date:'',newCli:false,q:'',obs:'',plan:{n:0,freq:'semanal',start:''},
+  paid:s=>s.payments.reduce((a,p)=>a+p.amount,0), // incluye donaciones: liquidan saldo
   balance(s){return Math.max(0,U.r2(s.total-this.paid(s)))},
   total(){return this.cart.reduce((a,i)=>a+i.qty*i.price,0)},
   create(clientId){
     const items=this.cart.map(i=>({...i})),total=this.total();
     items.forEach(i=>{const p=Catalog.get(i.pid);if(p)p.stock-=i.qty});   // descuenta inventario
-    const s={id:U.uid(),date:U.$('sd').value||U.today(),clientId,items,total,
+    const s={id:U.uid(),date:U.$('sd').value||U.today(),clientId,items,total,obs:this.obs.trim(),
       payments:this.pays.filter(p=>p.amount>0).map(p=>({...p,date:U.$('sd').value||U.today()}))};
     s.freq=this.plan.freq;
     s.plan=this.schedule(U.r2(total-this.paid(s)),this.plan.n,this.plan.freq,this.plan.start||U.next(s.date,this.plan.freq));
-    Store.data.sales.push(s);Store.save();this.cart=[];this.pays=[];this.plan={n:0,freq:'semanal',start:''};return s},
+    Store.data.sales.push(s);Store.save();this.cart=[];this.pays=[];this.obs='';this.plan={n:0,freq:'semanal',start:''};return s},
   schedule(bal,n,freq,start){ // reparte el saldo en n plazos; el último absorbe el redondeo
     const o=[];if(!(n>0)||bal<=0)return o;const base=Math.floor(bal/n*100)/100;
     for(let i=0;i<n;i++)o.push({n:i+1,due:U.next(start,freq,i),amount:i===n-1?U.r2(bal-base*(n-1)):base,paid:0});return o},
@@ -187,6 +226,15 @@ const Sales={
       <div><b>${U.esc(p.name)}</b><br><span class="tag">${U.esc(p.cat)}</span> ${(p.madera||p.tela)?`<small style="color:var(--mut)">${U.esc([p.madera,p.tela].filter(Boolean).join(' · '))}</small> `:''}<small class="${p.stock<=2?'low':''}">${p.stock>0?'stock '+p.stock:'Agotado'}</small></div>
       <div class="r"><b>${U.money(p.price)}</b><br><small style="color:var(--pk2)">${p.stock>0?'+ Agregar':''}</small></div></div>`).join('')
       ||'<div class="empty">Sin resultados para «'+U.esc(this.q)+'»</div>'},
+  breakdown(){ // desglose por artículo con descuento (se muestra junto a la forma de pago)
+    if(!this.cart.length)return '';
+    const desc=this.cart.reduce((a,i)=>a+i.qty*(i.disc||0),0);
+    return `<h3>Desglose por artículo</h3><div class="tw"><table><tr><th>Pieza</th><th class="r">Cant.</th><th class="r">Precio lista</th><th class="r">Descuento c/u</th><th class="r">Subtotal</th></tr>
+      ${this.cart.map((i,k)=>`<tr><td>${U.esc(i.name)}</td><td class="r">${i.qty}</td><td class="r">${U.money(i.list)}</td>
+        <td class="r"><input style="width:100px;text-align:right" type="number" min="0" max="${i.list}" value="${i.disc||0}" onchange="Sales.ui.setDisc(${k},this.value)"></td>
+        <td class="r">${U.money(i.qty*i.price)}</td></tr>`).join('')}</table></div>
+      <small style="color:var(--mut)">Descuento total aplicado: <b>${U.money(desc)}</b></small>
+      <label style="margin:10px 0">Observaciones<textarea rows="2" placeholder="Particularidades de la venta (entrega, acabados, acuerdos…)" oninput="Sales.obs=this.value">${U.esc(this.obs)}</textarea></label>`},
   view(){
     const ps=Store.data.products.filter(p=>p.stock>0),tot=this.total(),paid=this.pays.reduce((a,p)=>a+(+p.amount||0),0);
     return `<div class="two"><div class="card"><h2>1 · Cliente y muebles</h2>
@@ -205,7 +253,8 @@ const Sales={
         <td class="r"><input style="width:100px;text-align:right" type="number" value="${i.price}" onchange="Sales.ui.setPrice(${k},this.value)"></td>
         <td class="r">${U.money(i.qty*i.price)}</td><td><button class="btn d s" onclick="Sales.cart.splice(${k},1);App.render()">✕</button></td></tr>`).join('')||'<tr><td colspan=5 class="empty">Agrega muebles a la venta</td></tr>'}</table></div>
       <p class="r">Total: <span class="tot">${U.money(tot)}</span></p></div>
-    <div class="card"><h2>2 · Forma de pago</h2><p style="color:var(--mut);margin-top:0">Un solo pago o varios; combina efectivo, transferencia y tarjeta. Si queda saldo, se abona después en Historial.</p>
+    <div class="card"><h2>2 · Forma de pago</h2><p style="color:var(--mut);margin-top:0">Un solo pago o varios; combina efectivo, transferencia, tarjeta o donación (liquida saldo pero no cuenta como ingreso). Si queda saldo, se abona después en Historial.</p>
+      ${this.breakdown()}
       ${this.pays.map((p,k)=>`<div class="row"><label>Método<select onchange="Sales.pays[${k}].method=this.value">${Object.entries(METHODS).map(([m,l])=>`<option value="${m}" ${p.method===m?'selected':''}>${l}</option>`).join('')}</select></label>
         <label>Monto<input type="number" min="0" value="${p.amount}" onchange="Sales.pays[${k}].amount=+this.value;App.render()"></label>
         <button class="btn d s" onclick="Sales.pays.splice(${k},1);App.render()">✕</button></div>`).join('')}
@@ -219,11 +268,14 @@ const Sales={
     addItem(id){const p=Catalog.get(id),q=+U.$('sq').value;if(!p||q<1)return;
       const inCart=Sales.cart.filter(i=>i.pid===p.id).reduce((a,i)=>a+i.qty,0);
       if(inCart+q>p.stock)return U.toast('Stock insuficiente (quedan '+p.stock+')');
-      Sales.cart.push({pid:p.id,name:p.name,cat:p.cat,qty:q,price:p.price});App.render()},
+      Sales.cart.push({pid:p.id,name:p.name,cat:p.cat,qty:q,price:p.price,list:p.price,disc:0});App.render()},
     addClient(){const name=U.$('qn').value.trim();if(!name)return U.toast('Escribe el nombre del cliente');
       const c=Clients.add({name,phone:U.$('qt').value,addr:U.$('qa').value});
       Sales.cid=c.id;Sales.newCli=false;U.toast('Cliente agregado');App.render()},
-    setPrice(k,v){Sales.cart[k].price=Math.max(0,+v);App.render()},
+    // precio editado a mano → el descuento se recalcula contra el precio de lista
+    setPrice(k,v){const i=Sales.cart[k];i.price=Math.max(0,+v);i.disc=Math.max(0,U.r2((i.list??i.price)-i.price));App.render()},
+    // descuento por pieza → el precio final = lista - descuento
+    setDisc(k,v){const i=Sales.cart[k];i.disc=Math.min(i.list,Math.max(0,+v||0));i.price=U.r2(i.list-i.disc);App.render()},
     addPay(){Sales.pays.push({method:'efectivo',amount:Math.max(0,Sales.total()-Sales.pays.reduce((a,p)=>a+(+p.amount||0),0))});App.render()},
     fullPay(){Sales.pays=[{method:'efectivo',amount:Sales.total()}];App.render()},
     save(){
@@ -234,20 +286,60 @@ const Sales={
       if(paid<Sales.total()&&!cid&&!confirm('Queda saldo pendiente sin cliente registrado. ¿Continuar?'))return;
       Sales.create(cid);Sales.cid='';Sales.date='';U.toast('Venta registrada ✔');App.go('history')}
   },
-  history(){
-    const S=[...Store.data.sales].sort((a,b)=>b.date.localeCompare(a.date));
-    return `<div class="card"><h2>Historial de ventas (${S.length})</h2><div class="tw"><table><tr><th>Fecha</th><th>Cliente</th><th>Muebles</th><th class="r">Total</th><th>Pagos</th><th class="r">Saldo</th><th></th></tr>
-    ${S.map(s=>`<tr><td>${s.date}</td><td>${U.esc(Clients.name(s.clientId))}</td>
-      <td>${s.items.map(i=>`${i.qty}× ${U.esc(i.name)}`).join(', ')}</td><td class="r">${U.money(s.total)}</td>
-      <td>${s.payments.map(p=>`<span class="tag">${METHODS[p.method].split(' ')[0]} ${U.money(p.amount)}</span>`).join(' ')}</td>
-      <td class="r ${Sales.balance(s)>0?'low':'ok'}">${U.money(Sales.balance(s))}</td>
-      <td class="r">${Sales.balance(s)>0?`<button class="btn s" onclick="Collections.open('${s.id}')">Abonar</button> `:''}<button class="btn d s" onclick="Sales.ui.cancel('${s.id}')">Cancelar</button></td></tr>`).join('')||'<tr><td colspan=7 class="empty">Aún no hay ventas</td></tr>'}
-    </table></div></div>`},
   ui2:{},
 };
 Sales.ui.cancel=id=>{if(!confirm('¿Cancelar venta? Se regresan las piezas al stock.'))return;
   const s=Store.data.sales.find(x=>x.id===id);s.items.forEach(i=>{const p=Catalog.get(i.pid);if(p)p.stock+=i.qty});
   Store.data.sales=Store.data.sales.filter(x=>x.id!==id);Store.save();App.render()};
+
+/* ===== MÓDULO: Historial de ventas (filtros, orden y formato moderno) ===== */
+const History={
+  f:{from:'',to:'',cid:'',item:'',bal:'',sort:'date_desc'},
+  set(k,v){this.f[k]=v;this.refresh()},
+  refresh(){const e=U.$('hres');if(e)e.innerHTML=this.results()},
+  clear(){this.f={from:'',to:'',cid:'',item:'',bal:'',sort:'date_desc'};App.render()},
+  rows(){
+    const f=this.f,q=U.norm(f.item).trim();
+    let S=Store.data.sales.filter(s=>{
+      if(f.from&&s.date<f.from)return false;
+      if(f.to&&s.date>f.to)return false;
+      if(f.cid==='__m'?Clients.get(s.clientId):(f.cid&&s.clientId!==f.cid))return false;
+      if(q&&!s.items.some(i=>U.norm(i.name+' '+i.cat).includes(q)))return false;
+      if(f.bal==='con'&&Sales.balance(s)<=0)return false;
+      if(f.bal==='sin'&&Sales.balance(s)>0)return false;
+      return true});
+    const cmp={date_desc:(a,b)=>b.date.localeCompare(a.date),date_asc:(a,b)=>a.date.localeCompare(b.date),
+      client_asc:(a,b)=>Clients.name(a.clientId).localeCompare(Clients.name(b.clientId),'es'),
+      client_desc:(a,b)=>Clients.name(b.clientId).localeCompare(Clients.name(a.clientId),'es'),
+      total_desc:(a,b)=>b.total-a.total}[f.sort];
+    return S.sort(cmp)},
+  results(){
+    const S=this.rows(),tot=S.reduce((a,s)=>a+s.total,0),sal=S.reduce((a,s)=>a+Sales.balance(s),0);
+    return `<div class="hsum">${S.length} venta(s) · Total ${U.money(tot)} · Saldo ${U.money(sal)}</div>
+    <div class="hrow hd"><div>Fecha</div><div>Cliente</div><div>Muebles</div><div class="r">Total</div><div>Estado</div><div></div></div>
+    ${S.map(s=>{const b=Sales.balance(s);return `<div class="hrow">
+      <div><b>${s.date}</b></div>
+      <div>${U.esc(Clients.name(s.clientId))}${s.obs?`<br><small>📝 ${U.esc(s.obs)}</small>`:''}</div>
+      <div class="hitems">${s.items.map(i=>`<span>${i.qty}× ${U.esc(i.name)}${i.disc>0?` <small>(-${U.money(i.disc)} c/u)</small>`:''}</span>`).join('')}</div>
+      <div class="r"><b>${U.money(s.total)}</b><br><small>Pagado ${U.money(Sales.paid(s))}</small></div>
+      <div><span class="pill ${b>0?'bad':'ok'}">${b>0?'Saldo '+U.money(b):'Liquidada'}</span><br>
+        ${s.payments.map(p=>`<span class="tag" style="font-size:11px">${METHODS[p.method].split(' ')[0]} ${U.money(p.amount)}</span>`).join(' ')}</div>
+      <div class="r">${b>0?`<button class="btn s" onclick="Collections.open('${s.id}')">Abonar</button> `:''}<button class="btn d s" onclick="Sales.ui.cancel('${s.id}')">Cancelar</button></div></div>`).join('')||'<div class="empty">Sin ventas con esos filtros</div>'}`},
+  view(){
+    const f=this.f;
+    return `<div class="card"><h2>Historial de ventas</h2>
+      <div class="row"><label>Desde<input type="date" value="${f.from}" onchange="History.set('from',this.value)"></label>
+      <label>Hasta<input type="date" value="${f.to}" onchange="History.set('to',this.value)"></label>
+      <label>Cliente<select onchange="History.set('cid',this.value)"><option value="">Todos</option><option value="__m" ${f.cid==='__m'?'selected':''}>Mostrador</option>
+        ${Store.data.clients.map(c=>`<option value="${c.id}" ${f.cid===c.id?'selected':''}>${U.esc(c.name)}</option>`).join('')}</select></label></div>
+      <div class="row"><label>Mueble<input type="search" placeholder="Nombre o tipo" value="${U.esc(f.item)}" oninput="History.set('item',this.value)"></label>
+      <label>Saldo<select onchange="History.set('bal',this.value)"><option value="">Todas</option><option value="con" ${f.bal==='con'?'selected':''}>Con saldo</option><option value="sin" ${f.bal==='sin'?'selected':''}>Liquidadas</option></select></label>
+      <label>Ordenar por<select onchange="History.set('sort',this.value)">
+        ${[['date_desc','Fecha (reciente)'],['date_asc','Fecha (antigua)'],['client_asc','Cliente (A-Z)'],['client_desc','Cliente (Z-A)'],['total_desc','Total (mayor)']].map(([k,l])=>`<option value="${k}" ${f.sort===k?'selected':''}>${l}</option>`).join('')}</select></label>
+      <button class="btn g" onclick="History.clear()">Limpiar</button></div>
+      <div id="hres">${this.results()}</div></div>`}
+};
+Sales.history=()=>History.view(); // compatibilidad con el nombre original
 
 /* ===== MÓDULO: Cobranza (abonos y plazos) ===== */
 const Collections={
@@ -255,6 +347,22 @@ const Collections={
   open(id){this.sel=id;App.go('collect');setTimeout(()=>{const e=U.$('det');e&&e.scrollIntoView({behavior:'smooth'})},60)},
   cur:()=>Store.data.sales.find(x=>x.id===Collections.sel),
   overdue:s=>(s.plan||[]).filter(i=>i.paid<i.amount&&i.due<U.today()).reduce((a,i)=>a+U.r2(i.amount-i.paid),0),
+  // Alertas: cuentas con pagos vencidos o que vencen hoy
+  alerts(){
+    const T=U.today(),P=Store.data.sales.filter(s=>Sales.balance(s)>0);
+    const ven=P.filter(s=>this.overdue(s)>0),hoy=P.filter(s=>(s.plan||[]).some(i=>i.paid<i.amount&&i.due===T));
+    return {ven,hoy,monto:ven.reduce((a,s)=>a+this.overdue(s),0),n:new Set([...ven,...hoy].map(s=>s.id)).size}},
+  // Recordatorio por WhatsApp (se abre con el mensaje escrito; tú lo envías)
+  wa(id){
+    const s=Store.data.sales.find(x=>x.id===id),c=Clients.get(s&&s.clientId);
+    let ph=String(c&&c.phone||'').replace(/\D/g,'');
+    if(!ph)return U.toast('El cliente no tiene teléfono registrado');
+    if(ph.length===10)ph='52'+ph; // México
+    const ov=this.overdue(s),nd=Sales.nextDue(s),bal=Sales.balance(s);
+    const msg='Hola '+c.name+', le saludamos de Mueblería Rosa. '+
+      (ov>0?'Le recordamos que tiene un pago vencido por '+U.money(ov)+'. ':(nd?'Le recordamos su próximo pago de '+U.money(U.r2(nd.amount-nd.paid))+' con fecha '+nd.due+'. ':''))+
+      'Su saldo total pendiente es '+U.money(bal)+'. ¡Gracias por su preferencia!';
+    window.open('https://wa.me/'+ph+'?text='+encodeURIComponent(msg),'_blank')},
   pay(){const s=this.cur(),a=U.r2(+U.$('aa').value),bal=Sales.balance(s);
     if(!(a>0))return U.toast('Escribe un monto');if(a>bal)return U.toast('El abono excede el saldo ('+U.money(bal)+')');
     s.payments.push({method:U.$('am').value,amount:a,date:U.$('ad').value||U.today(),plan:true});
@@ -302,7 +410,7 @@ const Collections={
       <td>${(s.plan||[]).length?`${s.plan.length} · ${FREQ[s.freq]||''}`:'<small>Sin plan</small>'}</td>
       <td>${nd?`${nd.due}<br><small>${U.money(U.r2(nd.amount-nd.paid))}</small>`:'—'}</td>
       <td>${ov>0?`<span class="low">Vencido ${U.money(ov)}</span>`:'<span class="ok">Al corriente</span>'}</td>
-      <td class="r"><button class="btn s" onclick="Collections.open('${s.id}')">Abonar</button></td></tr>`}).join('')||'<tr><td colspan=8 class="empty">🎉 No hay saldos pendientes</td></tr>'}
+      <td class="r" style="white-space:nowrap"><button class="btn s" onclick="Collections.open('${s.id}')">Abonar</button> <button class="btn g s" onclick="Collections.wa('${s.id}')">💬 WhatsApp</button></td></tr>`}).join('')||'<tr><td colspan=8 class="empty">🎉 No hay saldos pendientes</td></tr>'}
     </table></div></div>${this.detail()}`}
 };
 
@@ -313,41 +421,79 @@ const Reports={
   group(rows){ // rows: [key,value]
     const m={};rows.forEach(([k,v])=>m[k]=(m[k]||0)+v);
     return Object.entries(m).sort((a,b)=>b[1]-a[1])},
-  block(title,data,fmt=k=>U.esc(k)){
+  block(title,data,fmt=k=>U.esc(k),vf=U.money){
     const max=Math.max(1,...data.map(d=>d[1]));
-    return `<div class="card"><h3>${title}</h3><div class="tw"><table>${data.map(([k,v])=>`<tr><td>${fmt(k)}</td><td style="width:35%"><div class="bar"><i style="width:${v/max*100}%"></i></div></td><td class="r"><b>${U.money(v)}</b></td></tr>`).join('')||'<tr><td class="empty">Sin datos</td></tr>'}</table></div></div>`},
+    return `<div class="card"><h3>${title}</h3><div class="tw"><table>${data.map(([k,v])=>`<tr><td>${fmt(k)}</td><td style="width:35%"><div class="bar"><i style="width:${Math.max(0,v)/max*100}%"></i></div></td><td class="r"><b>${vf(v)}</b></td></tr>`).join('')||'<tr><td class="empty">Sin datos</td></tr>'}</table></div></div>`},
   view(){
-    const S=this.filtered(),total=S.reduce((a,s)=>a+s.total,0),inR=d=>(!this.from||d>=this.from)&&(!this.to||d<=this.to),PY=Store.data.sales.flatMap(s=>s.payments.filter(p=>inR(p.date))),cobrado=PY.reduce((a,p)=>a+p.amount,0),porCobrar=Store.data.sales.reduce((a,s)=>a+Sales.balance(s),0),vencido=Store.data.sales.reduce((a,s)=>a+Collections.overdue(s),0),
-      piezas=S.reduce((a,s)=>a+s.items.reduce((x,i)=>x+i.qty,0),0);
+    const S=this.filtered(),total=S.reduce((a,s)=>a+s.total,0),inR=d=>(!this.from||d>=this.from)&&(!this.to||d<=this.to),
+      PY=Store.data.sales.flatMap(s=>s.payments.filter(p=>inR(p.date))),
+      ING=PY.filter(p=>p.method!=='donacion'),DON=PY.filter(p=>p.method==='donacion'), // las donaciones NO son ingreso
+      cobrado=ING.reduce((a,p)=>a+p.amount,0),donado=DON.reduce((a,p)=>a+p.amount,0),
+      porCobrar=Store.data.sales.reduce((a,s)=>a+Sales.balance(s),0),vencido=Store.data.sales.reduce((a,s)=>a+Collections.overdue(s),0),
+      piezas=S.reduce((a,s)=>a+s.items.reduce((x,i)=>x+i.qty,0),0),
+      descuentos=S.reduce((a,s)=>a+s.items.reduce((x,i)=>x+i.qty*(i.disc||0),0),0),
+      ticket=S.length?total/S.length:0;
+    const items=S.flatMap(s=>s.items.map(i=>({...i,date:s.date,client:Clients.name(s.clientId)})));
+    const prod=i=>Catalog.get(i.pid)||{};
     const byDay=this.group(S.map(s=>[s.date,s.total])).sort((a,b)=>b[0].localeCompare(a[0]));
-    const byMethod=this.group(PY.map(p=>[p.method,p.amount])),byPayDay=this.group(PY.map(p=>[p.date,p.amount])).sort((a,b)=>b[0].localeCompare(a[0]));
+    const byMonth=this.group(S.map(s=>[s.date.slice(0,7),s.total])).sort((a,b)=>b[0].localeCompare(a[0]));
+    const DOW=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+    const byDow=this.group(S.map(s=>[DOW[U.d(s.date).getDay()],s.total]));
+    const byMethod=this.group(PY.map(p=>[p.method,p.amount])),byPayDay=this.group(ING.map(p=>[p.date,p.amount])).sort((a,b)=>b[0].localeCompare(a[0]));
     const byClient=this.group(S.map(s=>[Clients.name(s.clientId),s.total]));
-    const byCat=this.group(S.flatMap(s=>s.items.map(i=>[i.cat,i.qty*i.price])));
-    const byItem=this.group(S.flatMap(s=>s.items.map(i=>[i.name,i.qty*i.price])));
+    const byCat=this.group(items.map(i=>[i.cat,i.qty*i.price]));
+    const byItem=this.group(items.map(i=>[i.name,i.qty*i.price]));
+    const byUnits=this.group(items.map(i=>[i.name,i.qty]));
+    const byMadera=this.group(items.map(i=>[prod(i).madera||'Sin especificar',i.qty*i.price]));
+    const byTela=this.group(items.map(i=>[prod(i).tela||'Sin especificar',i.qty*i.price]));
+    const byDisc=this.group(items.filter(i=>i.disc>0).map(i=>[i.name,i.qty*i.disc]));
+    const saldoCli=this.group(Store.data.sales.filter(s=>Sales.balance(s)>0).map(s=>[Clients.name(s.clientId),Sales.balance(s)]));
+    const aging={'1-30 días':0,'31-60 días':0,'Más de 60 días':0};
+    Store.data.sales.forEach(s=>(s.plan||[]).filter(i=>i.paid<i.amount&&i.due<U.today()).forEach(i=>{
+      const d=Math.floor((U.d(U.today())-U.d(i.due))/864e5),k=d<=30?'1-30 días':d<=60?'31-60 días':'Más de 60 días';aging[k]+=U.r2(i.amount-i.paid)}));
+    const low=Store.data.products.filter(p=>p.stock<=2).map(p=>[p.name,p.stock]).sort((a,b)=>a[1]-b[1]);
+    const sold=new Set(items.map(i=>i.pid)),still=Store.data.products.filter(p=>!sold.has(p.id)&&p.stock>0).map(p=>[p.name,p.stock]);
     const stockVal=Store.data.products.reduce((a,p)=>a+p.stock*p.price,0);
+    const stockCat=this.group(Store.data.products.map(p=>[p.cat,p.stock*p.price]));
+    const pz=v=>v+' pzas';
     return `<div class="card"><h2>Reportes</h2><div class="row"><label>Desde<input type="date" value="${this.from}" onchange="Reports.from=this.value;App.render()"></label>
       <label>Hasta<input type="date" value="${this.to}" onchange="Reports.to=this.value;App.render()"></label>
       <button class="btn g" onclick="Reports.from=Reports.to=U.today();App.render()">Hoy</button>
       <button class="btn g" onclick="Reports.from=Reports.to='';App.render()">Todo</button></div></div>
     <div class="grid" style="margin-bottom:14px"><div class="kpi"><small>Vendido</small><b>${U.money(total)}</b></div>
-      <div class="kpi"><small>Cobrado en el periodo</small><b>${U.money(cobrado)}</b></div><div class="kpi"><small>Por cobrar (total)</small><b>${U.money(porCobrar)}</b></div><div class="kpi"><small>Vencido</small><b style="color:var(--bad)">${U.money(vencido)}</b></div>
-      <div class="kpi"><small>Piezas vendidas</small><b>${piezas}</b></div><div class="kpi"><small>Valor en inventario</small><b>${U.money(stockVal)}</b></div></div>
-    <div class="two">${this.block('📅 Por día',byDay)}${this.block('💳 Por método de pago (cobrado)',byMethod,k=>METHODS[k])}
-    ${this.block('💰 Cobrado por día',byPayDay)}${this.block('👤 Por cliente',byClient)}${this.block('🛋️ Por tipo de mueble',byCat)}</div>${this.block('📦 Por mueble',byItem)}`}
+      <div class="kpi"><small>Ingreso cobrado (sin donaciones)</small><b>${U.money(cobrado)}</b></div><div class="kpi"><small>Donaciones</small><b>${U.money(donado)}</b></div>
+      <div class="kpi"><small>Por cobrar (total)</small><b>${U.money(porCobrar)}</b></div><div class="kpi"><small>Vencido</small><b style="color:var(--bad)">${U.money(vencido)}</b></div>
+      <div class="kpi"><small>Piezas vendidas</small><b>${piezas}</b></div><div class="kpi"><small>Ticket promedio</small><b>${U.money(ticket)}</b></div>
+      <div class="kpi"><small>Descuentos otorgados</small><b>${U.money(descuentos)}</b></div><div class="kpi"><small>Valor en inventario</small><b>${U.money(stockVal)}</b></div></div>
+    <div class="two">${this.block('📅 Por día',byDay)}${this.block('🗓️ Por mes',byMonth)}${this.block('📆 Por día de la semana',byDow)}
+    ${this.block('💳 Por método de pago (incluye donación)',byMethod,k=>METHODS[k])}${this.block('💰 Ingreso cobrado por día',byPayDay)}${this.block('👤 Por cliente',byClient)}
+    ${this.block('🛋️ Por tipo de mueble',byCat)}${this.block('🪵 Por madera',byMadera)}${this.block('🧵 Por tela',byTela)}
+    ${this.block('🏷️ Descuentos por mueble',byDisc)}${this.block('📈 Piezas vendidas por mueble',byUnits,undefined,pz)}
+    ${this.block('⚠️ Saldo pendiente por cliente',saldoCli)}${this.block('⏳ Antigüedad de saldo vencido',Object.entries(aging))}
+    ${this.block('📉 Stock bajo (≤ 2 piezas)',low,undefined,pz)}${this.block('💤 Con stock y sin ventas en el periodo',still,undefined,pz)}
+    ${this.block('🏬 Valor de inventario por tipo',stockCat)}</div>${this.block('📦 Por mueble',byItem)}`}
 };
 
 /* ===== MÓDULO: App (navegación) ===== */
 const App={
   tab:'reports',
   tabs:[['reports','📊 Reportes'],['sale','🛒 Nueva venta'],['history','🧾 Historial'],['collect','💰 Cobranza'],['catalog','🛋️ Catálogo'],['clients','👥 Clientes']],
-  views:{reports:()=>Reports.view(),sale:()=>Sales.view(),history:()=>Sales.history(),collect:()=>Collections.view(),catalog:()=>Catalog.view(),clients:()=>Clients.view()},
+  views:{reports:()=>Reports.view(),sale:()=>Sales.view(),history:()=>History.view(),collect:()=>Collections.view(),catalog:()=>Catalog.view(),clients:()=>Clients.view()},
   go(t){this.tab=t;this.render()},
+  hideAlert:false,
+  alertBanner(){
+    if(this.hideAlert||!Store.ready)return '';
+    const a=Collections.alerts();if(!a.n)return '';
+    return `<div class="card alert"><b>🔔 Cobranza:</b> ${a.ven.length?`${a.ven.length} cuenta(s) con pagos vencidos (${U.money(a.monto)})`:''}${a.ven.length&&a.hoy.length?' · ':''}${a.hoy.length?`${a.hoy.length} con pago que vence hoy`:''}
+      <span style="float:right"><button class="btn s" onclick="App.hideAlert=true;App.go('collect')">Ver cobranza</button> <button class="btn g s" onclick="App.hideAlert=true;App.render()">Cerrar</button></span></div>`},
   render(){
-    U.$('nav').innerHTML=this.tabs.map(([k,l])=>`<button class="${k===this.tab?'on':''}" onclick="App.go('${k}')">${l}</button>`).join('');
-    U.$('app').innerHTML=this.views[this.tab]();
+    const n=Store.ready?Collections.alerts().n:0;
+    U.$('nav').innerHTML=this.tabs.map(([k,l])=>`<button class="${k===this.tab?'on':''}" onclick="App.go('${k}')">${l}${k==='collect'&&n?` <span class="chip bad" style="margin:0 0 0 4px">${n}</span>`:''}</button>`).join('');
+    U.$('app').innerHTML=this.alertBanner()+this.views[this.tab]();
   },
   async refresh(){await Store.load();this.render()},
   async init(){U.$('app').innerHTML='<div class="empty">Cargando datos…</div>';await Store.load();this.render()}
 };
 App.init();
+
 </script></body></html>
