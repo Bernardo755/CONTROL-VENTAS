@@ -51,6 +51,15 @@ td{padding:8px;border-bottom:1px solid var(--line);vertical-align:middle}
 
 /* ===== Alerta de cobranza ===== */
 .alert{background:#fff7e6;border-color:#f5d48a}
+
+/* ===== Reportes desplegables ===== */
+details.rep{padding:0}
+details.rep>summary{cursor:pointer;list-style:none;padding:14px 16px;font-weight:700;color:var(--pk2)}
+details.rep>summary::-webkit-details-marker{display:none}
+details.rep>summary::before{content:'▸';display:inline-block;margin-right:8px;transition:transform .15s}
+details.rep[open]>summary::before{transform:rotate(90deg)}
+details.rep>summary small{color:var(--mut);font-weight:500}
+details.rep>.tw{padding:0 16px 14px}
 </style></head><body>
 <header><h1>🌸 Mueblería Rosa</h1><p>Ventas, inventario y reportes en un solo lugar</p><span id="st" class="chip">…</span> <button class="chip" style="border:0;cursor:pointer" onclick="App.refresh()">↻ Actualizar</button></header>
 <nav id="nav"></nav><main id="app"></main>
@@ -421,9 +430,11 @@ const Reports={
   group(rows){ // rows: [key,value]
     const m={};rows.forEach(([k,v])=>m[k]=(m[k]||0)+v);
     return Object.entries(m).sort((a,b)=>b[1]-a[1])},
+  openSet:new Set(), // recuerda qué tablas están abiertas al cambiar filtros
+  tog(t,o){o?this.openSet.add(t):this.openSet.delete(t)},
   block(title,data,fmt=k=>U.esc(k),vf=U.money){
     const max=Math.max(1,...data.map(d=>d[1]));
-    return `<div class="card"><h3>${title}</h3><div class="tw"><table>${data.map(([k,v])=>`<tr><td>${fmt(k)}</td><td style="width:35%"><div class="bar"><i style="width:${Math.max(0,v)/max*100}%"></i></div></td><td class="r"><b>${vf(v)}</b></td></tr>`).join('')||'<tr><td class="empty">Sin datos</td></tr>'}</table></div></div>`},
+    return `<details class="card rep" ${this.openSet.has(title)?'open':''} ontoggle="Reports.tog(this.dataset.t,this.open)" data-t="${U.esc(title)}"><summary>${title} <small>(${data.length})</small></summary><div class="tw" style="margin-top:8px"><table>${data.map(([k,v])=>`<tr><td>${fmt(k)}</td><td style="width:35%"><div class="bar"><i style="width:${Math.max(0,v)/max*100}%"></i></div></td><td class="r"><b>${vf(v)}</b></td></tr>`).join('')||'<tr><td class="empty">Sin datos</td></tr>'}</table></div></details>`},
   view(){
     const S=this.filtered(),total=S.reduce((a,s)=>a+s.total,0),inR=d=>(!this.from||d>=this.from)&&(!this.to||d<=this.to),
       PY=Store.data.sales.flatMap(s=>s.payments.filter(p=>inR(p.date))),
@@ -444,8 +455,6 @@ const Reports={
     const byCat=this.group(items.map(i=>[i.cat,i.qty*i.price]));
     const byItem=this.group(items.map(i=>[i.name,i.qty*i.price]));
     const byUnits=this.group(items.map(i=>[i.name,i.qty]));
-    const byMadera=this.group(items.map(i=>[prod(i).madera||'Sin especificar',i.qty*i.price]));
-    const byTela=this.group(items.map(i=>[prod(i).tela||'Sin especificar',i.qty*i.price]));
     const byDisc=this.group(items.filter(i=>i.disc>0).map(i=>[i.name,i.qty*i.disc]));
     const saldoCli=this.group(Store.data.sales.filter(s=>Sales.balance(s)>0).map(s=>[Clients.name(s.clientId),Sales.balance(s)]));
     const aging={'1-30 días':0,'31-60 días':0,'Más de 60 días':0};
@@ -467,7 +476,7 @@ const Reports={
       <div class="kpi"><small>Descuentos otorgados</small><b>${U.money(descuentos)}</b></div><div class="kpi"><small>Valor en inventario</small><b>${U.money(stockVal)}</b></div></div>
     <div class="two">${this.block('📅 Por día',byDay)}${this.block('🗓️ Por mes',byMonth)}${this.block('📆 Por día de la semana',byDow)}
     ${this.block('💳 Por método de pago (incluye donación)',byMethod,k=>METHODS[k])}${this.block('💰 Ingreso cobrado por día',byPayDay)}${this.block('👤 Por cliente',byClient)}
-    ${this.block('🛋️ Por tipo de mueble',byCat)}${this.block('🪵 Por madera',byMadera)}${this.block('🧵 Por tela',byTela)}
+    ${this.block('🛋️ Por tipo de mueble',byCat)}
     ${this.block('🏷️ Descuentos por mueble',byDisc)}${this.block('📈 Piezas vendidas por mueble',byUnits,undefined,pz)}
     ${this.block('⚠️ Saldo pendiente por cliente',saldoCli)}${this.block('⏳ Antigüedad de saldo vencido',Object.entries(aging))}
     ${this.block('📉 Stock bajo (≤ 2 piezas)',low,undefined,pz)}${this.block('💤 Con stock y sin ventas en el periodo',still,undefined,pz)}
