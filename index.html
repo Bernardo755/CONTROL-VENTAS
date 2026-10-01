@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -39,7 +40,7 @@ td{padding:8px;border-bottom:1px solid var(--line);vertical-align:middle}
 .empty{color:var(--mut);padding:14px;text-align:center}
 
 /* ===== Nuevo: historial moderno ===== */
-.hrow{display:grid;grid-template-columns:110px 1.2fr 2fr 1fr 1fr auto;gap:12px;align-items:center;padding:12px 6px;border-bottom:1px solid var(--line)}
+.hrow{display:grid;grid-template-columns:96px 1.1fr 1.8fr 112px 124px 112px 88px;gap:14px;align-items:start;padding:14px 8px;border-bottom:1px solid var(--line)}
 .hrow.hd{color:var(--mut);font-size:12px;font-weight:600;padding:6px}
 .hrow:not(.hd):hover{background:var(--soft);border-radius:12px}
 .hrow small{color:var(--mut)}
@@ -47,7 +48,7 @@ td{padding:8px;border-bottom:1px solid var(--line);vertical-align:middle}
 .pill.ok{background:#e4f6ee;color:var(--ok)}.pill.bad{background:#fff0f3;color:var(--bad)}
 .hitems{display:flex;flex-direction:column;gap:2px;font-size:13px}
 .hsum{color:var(--mut);font-size:13px;margin:4px 0 8px}
-@media(max-width:760px){.hrow{grid-template-columns:1fr 1fr}.hrow.hd{display:none}}
+@media(max-width:760px){.hrow{grid-template-columns:1fr 1fr}.hrow.hd{display:none}.lb{display:block!important}}
 
 /* ===== Alerta de cobranza ===== */
 .alert{background:#fff7e6;border-color:#f5d48a}
@@ -60,6 +61,16 @@ details.rep>summary::before{content:'▸';display:inline-block;margin-right:8px;
 details.rep[open]>summary::before{transform:rotate(90deg)}
 details.rep>summary small{color:var(--mut);font-weight:500}
 details.rep>.tw{padding:0 16px 14px}
+
+.hrow.hd .sh{cursor:pointer;user-select:none}.hrow.hd .sh:hover{color:var(--pk2)}
+
+/* ===== Historial: columnas ordenadas ===== */
+.hrow .num{font-variant-numeric:tabular-nums;white-space:nowrap}
+.hrow .num b{display:block}
+.hrow .pm{font-size:12px;color:var(--mut);margin-top:3px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.hrow .est .pill{white-space:nowrap}
+.hrow .acts{display:flex;flex-direction:column;gap:5px;align-items:stretch}
+.lb{display:none;font-size:11px;color:var(--mut)}
 </style></head><body>
 <header><h1>🌸 Mueblería Rosa</h1><p>Ventas, inventario y reportes en un solo lugar</p><span id="st" class="chip">…</span> <button class="chip" style="border:0;cursor:pointer" onclick="App.refresh()">↻ Actualizar</button></header>
 <nav id="nav"></nav><main id="app"></main>
@@ -307,6 +318,10 @@ const History={
   set(k,v){this.f[k]=v;this.refresh()},
   refresh(){const e=U.$('hres');if(e)e.innerHTML=this.results()},
   clear(){this.f={from:'',to:'',cid:'',item:'',bal:'',sort:'date_desc'};App.render()},
+  // flecha del encabezado activo (▼ descendente / ▲ ascendente)
+  arrow(k){const [c,d]=this.f.sort.split('_');return c===k?(d==='desc'?' ▼':' ▲'):''},
+  // clic en encabezado: alterna ascendente/descendente
+  sortBy(k){this.f.sort=this.f.sort===k+'_desc'?k+'_asc':k+'_desc';App.render()},
   rows(){
     const f=this.f,q=U.norm(f.item).trim();
     let S=Store.data.sales.filter(s=>{
@@ -320,20 +335,23 @@ const History={
     const cmp={date_desc:(a,b)=>b.date.localeCompare(a.date),date_asc:(a,b)=>a.date.localeCompare(b.date),
       client_asc:(a,b)=>Clients.name(a.clientId).localeCompare(Clients.name(b.clientId),'es'),
       client_desc:(a,b)=>Clients.name(b.clientId).localeCompare(Clients.name(a.clientId),'es'),
-      total_desc:(a,b)=>b.total-a.total}[f.sort];
+      total_desc:(a,b)=>b.total-a.total,total_asc:(a,b)=>a.total-b.total,
+      status_desc:(a,b)=>Sales.balance(b)-Sales.balance(a),   // con más saldo primero
+      status_asc:(a,b)=>Sales.balance(a)-Sales.balance(b)}[f.sort]; // liquidadas primero
     return S.sort(cmp)},
   results(){
     const S=this.rows(),tot=S.reduce((a,s)=>a+s.total,0),sal=S.reduce((a,s)=>a+Sales.balance(s),0);
     return `<div class="hsum">${S.length} venta(s) · Total ${U.money(tot)} · Saldo ${U.money(sal)}</div>
-    <div class="hrow hd"><div>Fecha</div><div>Cliente</div><div>Muebles</div><div class="r">Total</div><div>Estado</div><div></div></div>
+    <div class="hrow hd"><div class="sh" onclick="History.sortBy('date')">Fecha${this.arrow('date')}</div><div class="sh" onclick="History.sortBy('client')">Cliente${this.arrow('client')}</div><div>Muebles</div><div class="r sh" onclick="History.sortBy('total')">Total${this.arrow('total')}</div><div class="r">Pagado</div><div class="sh" onclick="History.sortBy('status')">Estado${this.arrow('status')}</div><div></div></div>
     ${S.map(s=>{const b=Sales.balance(s);return `<div class="hrow">
       <div><b>${s.date}</b></div>
       <div>${U.esc(Clients.name(s.clientId))}${s.obs?`<br><small>📝 ${U.esc(s.obs)}</small>`:''}</div>
       <div class="hitems">${s.items.map(i=>`<span>${i.qty}× ${U.esc(i.name)}${i.disc>0?` <small>(-${U.money(i.disc)} c/u)</small>`:''}</span>`).join('')}</div>
-      <div class="r"><b>${U.money(s.total)}</b><br><small>Pagado ${U.money(Sales.paid(s))}</small></div>
-      <div><span class="pill ${b>0?'bad':'ok'}">${b>0?'Saldo '+U.money(b):'Liquidada'}</span><br>
-        ${s.payments.map(p=>`<span class="tag" style="font-size:11px">${METHODS[p.method].split(' ')[0]} ${U.money(p.amount)}</span>`).join(' ')}</div>
-      <div class="r">${b>0?`<button class="btn s" onclick="Collections.open('${s.id}')">Abonar</button> `:''}<button class="btn d s" onclick="Sales.ui.cancel('${s.id}')">Cancelar</button></div></div>`}).join('')||'<div class="empty">Sin ventas con esos filtros</div>'}`},
+      <div class="r num"><span class="lb">Total</span><b>${U.money(s.total)}</b></div>
+      <div class="r num"><span class="lb">Pagado</span><b>${U.money(Sales.paid(s))}</b>
+        ${s.payments.map(p=>`<div class="pm">${METHODS[p.method].split(' ')[0]} ${U.money(p.amount)}</div>`).join('')}</div>
+      <div class="est"><span class="pill ${b>0?'bad':'ok'}">${b>0?'Con saldo':'Liquidada'}</span>${b>0?`<div class="pm">Debe ${U.money(b)}</div>`:''}</div>
+      <div class="acts">${b>0?`<button class="btn s" onclick="Collections.open('${s.id}')">Abonar</button>`:''}<button class="btn d s" onclick="Sales.ui.cancel('${s.id}')">Cancelar</button></div></div>`}).join('')||'<div class="empty">Sin ventas con esos filtros</div>'}`},
   view(){
     const f=this.f;
     return `<div class="card"><h2>Historial de ventas</h2>
@@ -344,7 +362,7 @@ const History={
       <div class="row"><label>Mueble<input type="search" placeholder="Nombre o tipo" value="${U.esc(f.item)}" oninput="History.set('item',this.value)"></label>
       <label>Saldo<select onchange="History.set('bal',this.value)"><option value="">Todas</option><option value="con" ${f.bal==='con'?'selected':''}>Con saldo</option><option value="sin" ${f.bal==='sin'?'selected':''}>Liquidadas</option></select></label>
       <label>Ordenar por<select onchange="History.set('sort',this.value)">
-        ${[['date_desc','Fecha (reciente)'],['date_asc','Fecha (antigua)'],['client_asc','Cliente (A-Z)'],['client_desc','Cliente (Z-A)'],['total_desc','Total (mayor)']].map(([k,l])=>`<option value="${k}" ${f.sort===k?'selected':''}>${l}</option>`).join('')}</select></label>
+        ${[['date_desc','Fecha (reciente)'],['date_asc','Fecha (antigua)'],['client_asc','Cliente (A-Z)'],['client_desc','Cliente (Z-A)'],['total_desc','Total (mayor)'],['total_asc','Total (menor)'],['status_desc','Estado (con saldo primero)'],['status_asc','Estado (liquidadas primero)']].map(([k,l])=>`<option value="${k}" ${f.sort===k?'selected':''}>${l}</option>`).join('')}</select></label>
       <button class="btn g" onclick="History.clear()">Limpiar</button></div>
       <div id="hres">${this.results()}</div></div>`}
 };
